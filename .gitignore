@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Temporary & Audio output files
+*.wav
+input.wav
+
+# Model files (Large binaries)
+*.pt
+*.onnx
+*.engine
+
+# IDE files
+.vscode/
+.idea/
+*.swp
