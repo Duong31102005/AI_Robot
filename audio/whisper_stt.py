@@ -30,9 +30,11 @@ class WhisperSTT:
     """
 
     def __init__(self, model_size: str = WHISPER_MODEL_SIZE, udp_port: int = 5000):
-        logger.info(f"Đang tải mô hình Whisper ('{model_size}')...")
-        self.model = whisper.load_model(model_size)
-        logger.info("Mô hình Whisper đã sẵn sàng.")
+        import torch
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        logger.info(f"Đang tải mô hình Whisper ('{model_size}') trên thiết bị {self.device.upper()}...")
+        self.model = whisper.load_model(model_size, device=self.device)
+        logger.info(f"Mô hình Whisper đã sẵn sàng ({self.device.upper()} GPU Accelerated).")
 
         self.sample_rate = SAMPLE_RATE
         self.udp_port = udp_port
@@ -199,11 +201,13 @@ class WhisperSTT:
 
         # Nhận dạng giọng nói với Whisper
         try:
+            use_fp16 = (self.device == "cuda")
             result = self.model.transcribe(
                 AUDIO_OUTPUT_PATH,
                 language=LANGUAGE,
                 temperature=WHISPER_TEMPERATURE,
                 condition_on_previous_text=False,
+                fp16=use_fp16,
                 no_speech_threshold=WHISPER_NO_SPEECH_THRESHOLD
             )
         except Exception as e:
