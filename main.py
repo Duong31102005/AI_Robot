@@ -8,23 +8,46 @@ def print_menu():
     print("      ROBOT AI SERVER - MENU BẮT ĐẦU           ")
     print("===============================================")
     print("1. Chạy Vision (Phát hiện & Theo dõi người Face-to-Face)")
-    print("2. Chạy STT (Nhận dạng giọng nói tiếng Việt bằng Whisper)")
-    print("3. Chạy ROS 2 Command Node (Lắng nghe topic /robot/command)")
+    print("2. Chạy STT + LLM (Trò chuyện & Lệnh giọng nói Kim Qui)")
+    print("5. 🚀 CHẠY HỢP NHẤT TOÀN BỘ (Vision + STT + LLM Đa Luồng)")
+    print("3. Chạy ROS 2 Command Node (Giả lập Topic /robot/command)")
     print("4. Gửi lệnh văn bản thử nghiệm")
     print("0. Thoát")
     print("===============================================")
 
+
+def run_combined():
+    import threading
+    from scripts.main_vision import main as run_vision
+    from scripts.main_stt import main as run_stt
+
+    logger.info("🚀 Đang khởi chạy Hệ thống Hợp nhất Vision + STT Đa luồng...")
+    t_vision = threading.Thread(target=run_vision, daemon=True)
+    t_stt = threading.Thread(target=run_stt, daemon=True)
+
+    t_vision.start()
+    t_stt.start()
+
+    t_vision.join()
+    t_stt.join()
+
+
 def main():
     while True:
         print_menu()
-        choice = input("Nhập lựa chọn của bạn (0-4): ").strip()
+        choice = input("Nhập lựa chọn của bạn (0-5): ").strip()
 
         if choice == "1":
             from scripts.main_vision import main as run_vision
             run_vision()
+            break
         elif choice == "2":
             from scripts.main_stt import main as run_stt
             run_stt()
+            break
+        elif choice == "5":
+            run_combined()
+            break
         elif choice == "3":
             from communication.ros_command_node import run_ros_node
             run_ros_node()

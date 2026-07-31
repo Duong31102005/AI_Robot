@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 from config.settings import CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT, TARGET_FPS
 from utils.logger import get_logger
 
@@ -8,10 +8,10 @@ logger = get_logger("VisionCamera")
 
 class Camera:
     """
-    Quản lý kết nối thiết bị Camera/Webcam độc lập khỏi YOLO detector và ROS.
+    Quản lý kết nối thiết bị Camera/Webcam/IP Stream độc lập khỏi YOLO detector và ROS.
     """
 
-    def __init__(self, camera_index: int = CAMERA_INDEX, width: int = FRAME_WIDTH, height: int = FRAME_HEIGHT, fps: int = TARGET_FPS):
+    def __init__(self, camera_index: Union[int, str] = CAMERA_INDEX, width: int = FRAME_WIDTH, height: int = FRAME_HEIGHT, fps: int = TARGET_FPS):
         self.camera_index = camera_index
         self.width = width
         self.height = height

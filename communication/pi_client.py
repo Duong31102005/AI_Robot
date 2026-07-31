@@ -67,6 +67,32 @@ class PiClient:
             self.last_connected_status = False
             return False
 
+    def send_tts(self, text: str, timeout: float = 3.0) -> bool:
+        """Gửi câu văn bản TTS xuống Raspberry Pi để đọc ra Loa Bluetooth cắm ở Pi."""
+        if not text:
+            return False
+
+        if self.dry_run:
+            logger.info(f"[PI] [DRY_RUN] TTS simulated: '{text}'")
+            return True
+
+        tts_url = self.url.replace("/command", "/tts")
+        try:
+            response = requests.post(
+                tts_url,
+                json={"text": text},
+                timeout=timeout
+            )
+            is_ok = (response.status_code == 200)
+            if is_ok:
+                logger.info(f"[PI] TTS sent to Pi Bluetooth speaker: '{text}'")
+            else:
+                logger.warning(f"[PI] TTS send failed HTTP {response.status_code}")
+            return is_ok
+        except Exception as e:
+            logger.error(f"[PI] Error sending TTS to Pi: {e}")
+            return False
+
     def is_connected(self) -> bool:
         """Trả về trạng thái kết nối gần nhất."""
         return self.last_connected_status
