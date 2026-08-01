@@ -188,12 +188,14 @@ class WhisperSTT:
         except Exception:
             pass
 
-        # Preprocessing 3: Chuẩn hóa âm lượng Peak (Dành cho Mic có tín hiệu nhỏ)
+        # Preprocessing 3: Chuẩn hóa âm lượng Peak mềm mại (tránh khuyếch đại tiếng ồn nền quá mức)
         max_amp = float(np.max(np.abs(audio_data)))
-        if max_amp > 0.00002:
-            audio_data = (audio_data / max_amp) * 0.9
+        if max_amp > 0.0001:
+            if max_amp < 0.1:
+                # Chỉ khuyếch đại vừa phải nếu tín hiệu quá nhỏ
+                audio_data = (audio_data / max_amp) * 0.3
         else:
-            logger.info("[STT] Ignored silence")
+            logger.info("[STT] Ignored silence (amplitude too low)")
             return ""
 
         # Ghi âm ra file WAV tạm thời cho Whisper
@@ -211,7 +213,8 @@ class WhisperSTT:
                 fp16=use_fp16,
                 no_speech_threshold=WHISPER_NO_SPEECH_THRESHOLD,
                 beam_size=1,
-                best_of=1
+                best_of=1,
+                initial_prompt="Kim Qui ơi, robot Kim Qui, đi thẳng, lùi lại, quay trái, quay phải, dừng lại, còi."
             )
             logger.info(f"[STT] Whisper processing took {time.time() - start_transcribe:.2f}s")
         except Exception as e:
@@ -220,14 +223,17 @@ class WhisperSTT:
 
         segments = result.get("segments", [])
         for seg in segments:
-            if seg.get("no_speech_prob", 0.0) > WHISPER_NO_SPEECH_THRESHOLD:
-                logger.info("[STT] No speech recognized")
+            prob = seg.get("no_speech_prob", 0.0)
+            logger.info(f"[STT] Segment no_speech_prob: {prob:.4f}")
+            # Chỉ loại bỏ nếu cực kỳ chắc chắn là im lặng (> 90%)
+            if prob > 0.90:
+                logger.info("[STT] High no_speech_prob. Ignored segment.")
                 return ""
 
         text = result.get("text", "").strip()
 
         if not text or self._is_hallucination(text):
-            logger.info("[STT] No speech recognized")
+            logger.info("[STT] No speech recognized (empty or hallucinated)")
             return ""
 
         logger.info(f"[STT] Whisper transcribed: '{text}'")
