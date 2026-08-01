@@ -3,108 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Robot AI - Web Dashboard (Port 8090)</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>Robot Kim Qui - ROS2 & AI Master Control Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-dark: #090d16;
+            --panel-bg: #131b2e;
+            --panel-border: #1e2d4a;
+            --accent-cyan: #38bdf8;
+            --accent-blue: #6366f1;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Outfit', 'Inter', sans-serif;
         }
 
         body {
-            background-color: #0f172a;
-            color: #f8fafc;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
 
         header {
-            background: rgba(30, 41, 59, 0.8);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid #334155;
-            padding: 16px 24px;
+            background: rgba(19, 27, 46, 0.85);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--panel-border);
+            padding: 14px 28px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
-        .title {
-            font-size: 20px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #38bdf8, #818cf8);
+        .brand-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-logo {
+            font-size: 28px;
+        }
+
+        .brand-title {
+            font-size: 22px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .status-badge {
+        .brand-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .header-badges {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .badge {
             display: flex;
             align-items: center;
             gap: 8px;
             padding: 6px 14px;
             border-radius: 20px;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
-            background: #1e293b;
-            border: 1px solid #334155;
+            background: #0f172a;
+            border: 1px solid var(--panel-border);
         }
 
         .dot {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            background: #ef4444;
-            box-shadow: 0 0 10px #ef4444;
+            background: var(--accent-red);
+            box-shadow: 0 0 8px var(--accent-red);
         }
 
-        .status-badge.connected .dot {
-            background: #22c55e;
-            box-shadow: 0 0 10px #22c55e;
+        .badge.active .dot {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green);
         }
 
         main {
             flex: 1;
-            padding: 24px;
+            padding: 20px;
             display: grid;
-            grid-template-columns: 1fr 380px;
-            gap: 24px;
-            max-width: 1400px;
+            grid-template-columns: 1fr 420px;
+            gap: 20px;
+            max-width: 1600px;
             margin: 0 auto;
             width: 100%;
         }
 
-        .panel {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 16px;
-            padding: 20px;
+        .left-column {
             display: flex;
             flex-direction: column;
-            gap: 16px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            gap: 20px;
+        }
+
+        .right-column {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 10px;
         }
 
         .panel-title {
-            font-size: 15px;
-            font-weight: 600;
-            color: #94a3b8;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--accent-cyan);
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.08em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .camera-container {
+        .camera-wrapper {
             width: 100%;
             aspect-ratio: 16/9;
             background: #020617;
             border-radius: 12px;
             overflow: hidden;
             position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid #334155;
+            border: 1px solid var(--panel-border);
         }
 
         .camera-img {
@@ -113,115 +171,226 @@
             object-fit: cover;
         }
 
+        .camera-overlay {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent-green);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Telemetry Cards */
         .telemetry-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
         }
 
         .card {
-            background: #0f172a;
-            border: 1px solid #334155;
-            padding: 14px;
+            background: #0b1120;
+            border: 1px solid var(--panel-border);
+            padding: 12px;
             border-radius: 10px;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
         }
 
         .card-label {
-            font-size: 12px;
-            color: #64748b;
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
         }
 
         .card-value {
-            font-size: 18px;
-            font-weight: 700;
-            color: #38bdf8;
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--accent-cyan);
         }
 
-        .dpad-container {
+        /* Chat Window */
+        .chat-box {
+            background: #0b1120;
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            height: 220px;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .chat-msg {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            max-width: 85%;
+        }
+
+        .chat-msg.user {
+            align-self: flex-end;
+        }
+
+        .chat-msg.robot {
+            align-self: flex-start;
+        }
+
+        .chat-bubble {
+            padding: 8px 14px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .chat-msg.user .chat-bubble {
+            background: var(--accent-blue);
+            color: white;
+            border-bottom-right-radius: 2px;
+        }
+
+        .chat-msg.robot .chat-bubble {
+            background: #1e293b;
+            color: var(--accent-cyan);
+            border-bottom-left-radius: 2px;
+            border: 1px solid var(--panel-border);
+        }
+
+        .chat-sender {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .tts-input-container {
+            display: flex;
+            gap: 8px;
+        }
+
+        .input-text {
+            flex: 1;
+            background: #0b1120;
+            border: 1px solid var(--panel-border);
+            color: white;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .input-text:focus {
+            border-color: var(--accent-cyan);
+        }
+
+        /* Control D-Pad */
+        .dpad-wrapper {
             display: grid;
-            grid-template-columns: repeat(3, 70px);
-            grid-template-rows: repeat(3, 70px);
+            grid-template-columns: repeat(3, 75px);
+            grid-template-rows: repeat(3, 75px);
             gap: 10px;
             justify-content: center;
-            margin: 20px auto;
+            margin: 10px auto;
         }
 
         .btn {
-            background: #334155;
+            background: #1e293b;
             color: white;
-            border: none;
+            border: 1px solid var(--panel-border);
             border-radius: 12px;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.15s ease;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             user-select: none;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            gap: 2px;
+        }
+
+        .btn-sub {
+            font-size: 9px;
+            color: var(--text-muted);
+            font-weight: 500;
         }
 
         .btn:hover {
-            background: #475569;
+            background: #334155;
             transform: translateY(-2px);
+            border-color: var(--accent-cyan);
         }
 
         .btn:active {
             transform: translateY(1px);
-            background: #0284c7;
+            background: var(--accent-blue);
         }
 
         .btn-stop {
-            background: #dc2626;
+            background: #dc2626 !important;
+            border-color: #ef4444 !important;
         }
 
         .btn-stop:hover {
-            background: #b91c1c;
+            background: #b91c1c !important;
+        }
+
+        .btn-spin {
+            background: #8b5cf6 !important;
+        }
+
+        .btn-spin:hover {
+            background: #7c3aed !important;
         }
 
         .btn-beep {
-            background: #eab308;
-            color: #0f172a;
+            background: var(--accent-yellow) !important;
+            color: #090d16 !important;
         }
 
-        .btn-beep:hover {
-            background: #ca8a04;
-        }
-
+        /* D-Pad Positioning */
+        .btn-diag-left { grid-column: 1; grid-row: 1; }
         .btn-up { grid-column: 2; grid-row: 1; }
+        .btn-diag-right { grid-column: 3; grid-row: 1; }
         .btn-left { grid-column: 1; grid-row: 2; }
         .btn-stop-grid { grid-column: 2; grid-row: 2; }
         .btn-right { grid-column: 3; grid-row: 2; }
+        .btn-spin-grid { grid-column: 1; grid-row: 3; }
         .btn-down { grid-column: 2; grid-row: 3; }
+        .btn-beep-grid { grid-column: 3; grid-row: 3; }
 
-        .ip-bar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 8px;
+        .mode-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
         }
 
-        .ip-input {
-            flex: 1;
-            background: #0f172a;
-            border: 1px solid #334155;
+        .btn-mode {
+            padding: 10px;
+            font-size: 12px;
+            border-radius: 8px;
+            background: #0b1120;
+            border: 1px solid var(--panel-border);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .btn-mode.active {
+            background: var(--accent-blue);
             color: white;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 14px;
+            border-color: var(--accent-cyan);
         }
 
-        .btn-connect {
-            background: #0284c7;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-
-        @media (max-width: 900px) {
+        @media (max-width: 1100px) {
             main {
                 grid-template-columns: 1fr;
             }
@@ -231,71 +400,177 @@
 <body>
 
     <header>
-        <div class="title">🤖 ROBOT AI DASHBOARD (PORT 8090)</div>
-        <div class="status-badge" id="statusBadge">
-            <div class="dot" id="statusDot"></div>
-            <span id="statusText">DISCONNECTED</span>
+        <div class="brand-container">
+            <div class="brand-logo">🐢</div>
+            <div>
+                <div class="brand-title">ROBOT KIM QUI - MASTER CONTROL CENTER</div>
+                <div class="brand-subtitle">ROS2 Humble & AI Infrastructure | Galacticos - ĐH Đại Nam</div>
+            </div>
+        </div>
+
+        <div class="header-badges">
+            <div class="badge active" id="wsBadge">
+                <div class="dot"></div>
+                <span id="wsStatus">WS 8090 ONLINE</span>
+            </div>
+            <div class="badge active">
+                <div class="dot"></div>
+                <span>HTTP 8001 ONLINE</span>
+            </div>
+            <div class="badge active">
+                <div class="dot"></div>
+                <span>AI OLLAMA (QWEN2.5)</span>
+            </div>
         </div>
     </header>
 
     <main>
-        <!-- Cột Trái: Camera Feed & Telemetry -->
-        <div class="panel">
-            <div class="panel-title">📷 LUỒNG VIDEO CAMERA REALTIME</div>
-            <div class="camera-container">
-                <img id="cameraFeed" class="camera-img" src="http://192.168.61.135:8080/video_feed" alt="Camera Feed Loading..." onerror="this.alt='Camera Stream Offline'">
+        <!-- CỘT TRÁI: CAMERA VISION, LOG CHAT AI & CẢM BIẾN -->
+        <div class="left-column">
+            
+            <!-- PANEL 1: CAMERA REALTIME & YOLO AI -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">📷 LUỒNG VIDEO CAMERA REALTIME & NHẬN DIỆN YOLO11S</div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-mode active" onclick="toggleTracking()">Tracking ON</button>
+                    </div>
+                </div>
+                <div class="camera-wrapper">
+                    <img id="cameraFeed" class="camera-img" src="http://192.168.61.135:8080/video_feed" alt="Camera Stream Loading..." onerror="this.alt='Camera Offline'">
+                    <div class="camera-overlay" id="cameraStats">30 FPS | YOLO11s Target Track</div>
+                </div>
             </div>
 
-            <div class="panel-title" style="margin-top: 10px;">📊 THÔNG SỐ CẢM BIẾN & TELEMETRY</div>
-            <div class="telemetry-grid">
-                <div class="card">
-                    <div class="card-label">Chế độ Mode</div>
-                    <div class="card-value" id="valMode">ROS2</div>
+            <!-- PANEL 2: NHẬT KÝ HỘI THOẠI AI (STT -> LLM -> TTS) -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">🎙️ NHẬT KÝ HỘI THOẠI AI THỜI GIAN THỰC (PHOWHISPER + OLLAMA)</div>
                 </div>
-                <div class="card">
-                    <div class="card-label">Điện áp Pin</div>
-                    <div class="card-value" id="valBattery">12.6V</div>
+                <div class="chat-box" id="chatBox">
+                    <div class="chat-msg robot">
+                        <div class="chat-sender">Robot Kim Qui (AI)</div>
+                        <div class="chat-bubble">Chào bạn! Tôi tên là Kim Qui, sản phẩm Robot Made in Vietnam thuộc Đại học Đại Nam. Rất vui được hỗ trợ bạn!</div>
+                    </div>
                 </div>
-                <div class="card">
-                    <div class="card-label">Khoảng cách Trước</div>
-                    <div class="card-value" id="valFront">0.0 cm</div>
-                </div>
-                <div class="card">
-                    <div class="card-label">Góc Yaw (Xoay)</div>
-                    <div class="card-value" id="valYaw">0.0°</div>
-                </div>
-                <div class="card">
-                    <div class="card-label">Góc Pitch</div>
-                    <div class="card-value" id="valPitch">0.0°</div>
-                </div>
-                <div class="card">
-                    <div class="card-label">Góc Roll</div>
-                    <div class="card-value" id="valRoll">0.0°</div>
+                <div class="tts-input-container">
+                    <input type="text" id="ttsInput" class="input-text" placeholder="Nhập câu chữ để Kim Qui đọc ra Loa Pi..." onkeypress="if(event.key==='Enter') sendTTS()">
+                    <button class="btn" style="padding: 10px 18px; font-size: 13px;" onclick="sendTTS()">🔊 Phát Loa Pi</button>
                 </div>
             </div>
+
+            <!-- PANEL 3: TELEMETRY & CẢM BIẾN ROS2 -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">📊 THÔNG SỐ CẢM BIẾN & TELEMETRY ROS2 REALTIME</div>
+                </div>
+                <div class="telemetry-grid">
+                    <div class="card">
+                        <div class="card-label">Điện áp Pin</div>
+                        <div class="card-value" id="valBattery">12.6 V</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-label">Khoảng cách Trước</div>
+                        <div class="card-value" id="valFront">0.0 cm</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-label">Góc Xoay Yaw (3D)</div>
+                        <div class="card-value" id="valYaw">0.0°</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-label">Quãng đường Encoder</div>
+                        <div class="card-value" id="valOdom">0.00 m</div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
-        <!-- Cột Phải: Bảng điều khiển D-Pad -->
-        <div class="panel">
-            <div class="panel-title">⚙️ ĐỊA CHỈ KẾT NỐI WEBSOCKET</div>
-            <div class="ip-bar">
-                <input type="text" id="wsUrlInput" class="ip-input" value="ws://192.168.61.135:8090">
-                <button class="btn btn-connect" onclick="connectWebSocket()">Kết nối</button>
+        <!-- CỘT PHẢI: BẢNG ĐIỀU KHIỂN BÁNH XE FULL 8 HƯỚNG & CÀI ĐẶT -->
+        <div class="right-column">
+            
+            <!-- PANEL 4: D-PAD DIEU KHIEN BANH XE FULL HƯỚNG -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">🎮 BẢNG ĐIỀU KHIỂN BÁNH XE ROS2 (FULL 8 HƯỚNG)</div>
+                </div>
+
+                <div class="dpad-wrapper">
+                    <!-- Hàng 1 -->
+                    <button class="btn btn-diag-left" onmousedown="sendMove('cheo_trai', 150)" onmouseup="sendMove('dung', 0)">
+                        ↖
+                        <span class="btn-sub">Chéo Trái</span>
+                    </button>
+                    <button class="btn btn-up" onmousedown="sendMove('tien', 180)" onmouseup="sendMove('dung', 0)">
+                        ▲
+                        <span class="btn-sub">Tiến</span>
+                    </button>
+                    <button class="btn btn-diag-right" onmousedown="sendMove('cheo_phai', 150)" onmouseup="sendMove('dung', 0)">
+                        ↗
+                        <span class="btn-sub">Chéo Phải</span>
+                    </button>
+
+                    <!-- Hàng 2 -->
+                    <button class="btn btn-left" onmousedown="sendMove('trai', 180)" onmouseup="sendMove('dung', 0)">
+                        ◀
+                        <span class="btn-sub">Quay Trái</span>
+                    </button>
+                    <button class="btn btn-stop btn-stop-grid" onclick="sendMove('dung', 0)">
+                        ⏹
+                        <span class="btn-sub">Dừng</span>
+                    </button>
+                    <button class="btn btn-right" onmousedown="sendMove('phai', 180)" onmouseup="sendMove('dung', 0)">
+                        ▶
+                        <span class="btn-sub">Quay Phải</span>
+                    </button>
+
+                    <!-- Hàng 3 -->
+                    <button class="btn btn-spin btn-spin-grid" onclick="sendMove('xoay_tron', 200)">
+                        🔄
+                        <span class="btn-sub">Xoay 360°</span>
+                    </button>
+                    <button class="btn btn-down" onmousedown="sendMove('lui', 180)" onmouseup="sendMove('dung', 0)">
+                        ▼
+                        <span class="btn-sub">Lùi</span>
+                    </button>
+                    <button class="btn btn-beep btn-beep-grid" onclick="sendBeep()">
+                        🔔
+                        <span class="btn-sub">Còi Beep</span>
+                    </button>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                    <div class="card-label">CHỌN CHẾ ĐỘ HOẠT ĐỘNG ROBOT:</div>
+                    <div class="mode-container">
+                        <div class="btn-mode active" id="modeManual" onclick="setMode('manual')">Bằng Tay</div>
+                        <div class="btn-mode" id="modeAuto" onclick="setMode('auto')">YOLO Track</div>
+                        <div class="btn-mode" id="modeRos2" onclick="setMode('ros2')">SLAM ROS2</div>
+                    </div>
+                </div>
             </div>
 
-            <div class="panel-title" style="margin-top: 15px;">🎮 ĐIỀU KHIỂN BÁNH XE (D-PAD)</div>
-            <div class="dpad-container">
-                <button class="btn btn-up" onmousedown="sendMove('tien', 180)" onmouseup="sendMove('dung', 0)">▲</button>
-                <button class="btn btn-left" onmousedown="sendMove('trai', 180)" onmouseup="sendMove('dung', 0)">◀</button>
-                <button class="btn btn-stop btn-stop-grid" onclick="sendMove('dung', 0)">⏹</button>
-                <button class="btn btn-right" onmousedown="sendMove('phai', 180)" onmouseup="sendMove('dung', 0)">▶</button>
-                <button class="btn btn-down" onmousedown="sendMove('lui', 180)" onmouseup="sendMove('dung', 0)">▼</button>
+            <!-- PANEL 5: CAU HINH KET NOI WEBSOCKET & CỔNG HTTP -->
+            <div class="panel">
+                <div class="panel-header">
+                    <div class="panel-title">🔌 THÔNG TIN CỔNG MẠNG SYSTEM</div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: var(--text-muted);">Địa chỉ WebSocket:</span>
+                        <span style="color: var(--accent-cyan); font-weight: 600;">ws://192.168.61.135:8090</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: var(--text-muted);">Cổng HTTP Bridge:</span>
+                        <span style="color: var(--accent-cyan); font-weight: 600;">http://192.168.61.135:8001</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: var(--text-muted);">Cổng Video Stream:</span>
+                        <span style="color: var(--accent-cyan); font-weight: 600;">http://192.168.61.135:8080</span>
+                    </div>
+                </div>
             </div>
 
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button class="btn btn-beep" style="flex: 1; padding: 12px;" onclick="sendBeep()">🔔 Bấm Còi (Beep)</button>
-                <button class="btn btn-stop" style="flex: 1; padding: 12px;" onclick="sendMove('dung', 0)">🛑 Dừng Phanh</button>
-            </div>
         </div>
     </main>
 
@@ -303,71 +578,105 @@
         let ws = null;
 
         function connectWebSocket() {
-            const url = document.getElementById('wsUrlInput').value.trim();
-            console.log("Connecting to WebSocket:", url);
+            const wsUrl = "ws://192.168.61.135:8090";
+            if (ws) ws.close();
 
-            if (ws) {
-                ws.close();
-            }
-
-            ws = new WebSocket(url);
+            ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                console.log("WebSocket Connected!");
-                const badge = document.getElementById('statusBadge');
-                badge.classList.add('connected');
-                document.getElementById('statusText').innerText = "CONNECTED (8090)";
+                document.getElementById('wsBadge').classList.add('active');
+                document.getElementById('wsStatus').innerText = "WS 8090 ONLINE";
             };
 
             ws.onmessage = (event) => {
                 try {
                     const msg = JSON.parse(event.data);
                     if (msg.type === 'telemetry' && msg.data) {
-                        const data = msg.data;
-                        if (data.mode) document.getElementById('valMode').innerText = data.mode;
-                        if (data.battery) document.getElementById('valBattery').innerText = data.battery.toFixed(1) + "V";
-                        if (data.front_distance !== undefined) document.getElementById('valFront').innerText = data.front_distance.toFixed(1) + " cm";
-                        if (data.yaw !== undefined) document.getElementById('valYaw').innerText = data.yaw.toFixed(1) + "°";
-                        if (data.pitch !== undefined) document.getElementById('valPitch').innerText = data.pitch.toFixed(1) + "°";
-                        if (data.roll !== undefined) document.getElementById('valRoll').innerText = data.roll.toFixed(1) + "°";
+                        const d = msg.data;
+                        if (d.battery) document.getElementById('valBattery').innerText = d.battery.toFixed(1) + " V";
+                        if (d.front_distance !== undefined) document.getElementById('valFront').innerText = d.front_distance.toFixed(1) + " cm";
+                        if (d.yaw !== undefined) document.getElementById('valYaw').innerText = d.yaw.toFixed(1) + "°";
+                        if (d.encoder_distance !== undefined) document.getElementById('valOdom').innerText = d.encoder_distance.toFixed(2) + " m";
+                    } else if (msg.type === 'conversation') {
+                        addChatMessage(msg.sender, msg.text);
                     }
-                } catch (e) {
-                    console.error("WS Parse error:", e);
-                }
+                } catch (e) {}
             };
 
             ws.onclose = () => {
-                console.log("WebSocket Disconnected");
-                const badge = document.getElementById('statusBadge');
-                badge.classList.remove('connected');
-                document.getElementById('statusText').innerText = "DISCONNECTED";
-            };
-
-            ws.onerror = (err) => {
-                console.error("WebSocket Error:", err);
+                document.getElementById('wsBadge').classList.remove('active');
+                document.getElementById('wsStatus').innerText = "WS 8090 OFFLINE";
+                setTimeout(connectWebSocket, 3000);
             };
         }
 
         function sendMove(direction, speed) {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                const payload = JSON.stringify({
+                ws.send(JSON.stringify({
                     type: 'move',
                     direction: direction,
                     speed: speed
-                });
-                ws.send(payload);
-                console.log("Sent move command:", payload);
+                }));
             }
         }
 
         function sendBeep() {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'beep' }));
-                console.log("Sent beep command");
             }
         }
 
-        // Tự động kết nối khi vừa nạp trang Web
+        function sendTTS() {
+            const input = document.getElementById('ttsInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            addChatMessage("Bạn (Gửi Loa)", text);
+
+            fetch('http://192.168.61.135:8001/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            }).then(res => {
+                console.log("TTS Sent successfully");
+            }).catch(err => {
+                console.error("TTS Error:", err);
+            });
+
+            input.value = '';
+        }
+
+        function addChatMessage(sender, text) {
+            const chatBox = document.getElementById('chatBox');
+            const isUser = sender.includes('Bạn') || sender.includes('User');
+            
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `chat-msg ${isUser ? 'user' : 'robot'}`;
+            
+            msgDiv.innerHTML = `
+                <div class="chat-sender">${sender}</div>
+                <div class="chat-bubble">${text}</div>
+            `;
+            
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function setMode(mode) {
+            document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
+            if (mode === 'manual') document.getElementById('modeManual').classList.add('active');
+            if (mode === 'auto') document.getElementById('modeAuto').classList.add('active');
+            if (mode === 'ros2') document.getElementById('modeRos2').classList.add('active');
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'mode', mode: mode }));
+            }
+        }
+
+        function toggleTracking() {
+            setMode('auto');
+        }
+
         window.onload = () => {
             connectWebSocket();
         };
