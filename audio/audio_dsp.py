@@ -155,10 +155,11 @@ def process_audio_dsp(audio_data: np.ndarray, sample_rate: int = 16000) -> np.nd
     # 5. Adaptive Noise Reduction
     processed = adaptive_noise_reduction(processed)
 
-    # 6. Soft AGC
-    processed = soft_agc(processed, target_rms=0.12)
+    # 6. Soft AGC (Tối ưu cho UGREEN USB Webcam Mic)
+    processed = soft_agc(processed, target_rms=0.18)
 
     # 7. Anti Clipping & Peak Normalization
     processed = anti_clip(processed, threshold=0.95)
+    processed = normalize(processed, target_peak=0.90)
 
     return processed.astype(np.float32)

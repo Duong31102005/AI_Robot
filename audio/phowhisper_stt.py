@@ -166,18 +166,29 @@ class PhoWhisperSTT:
         except Exception as e:
             logger.warning(f"[PhoWhisperSTT] Local mic warning: {e}")
 
+        active_source = None
+
         while self.is_running:
             audio_block = None
-            if udp_sock:
-                ready = select.select([udp_sock], [], [], 0.01)
-                if ready[0]:
-                    packet, addr = udp_sock.recvfrom(8192)
-                    audio_block = np.frombuffer(packet, dtype=np.float32)
 
-            if audio_block is None and local_stream:
+            # 1. Thử nhận UDP audio từ Pi (Cổng 5000)
+            if udp_sock:
+                try:
+                    ready = select.select([udp_sock], [], [], 0.005)
+                    if ready[0]:
+                        packet, addr = udp_sock.recvfrom(8192)
+                        if len(packet) > 0:
+                            audio_block = np.frombuffer(packet, dtype=np.float32)
+                            active_source = "udp"
+                except Exception:
+                    pass
+
+            # 2. Nếu không có UDP từ Pi, dùng duy nhất Local Microphone PC (tránh xới trộn 2 nguồn âm)
+            if audio_block is None and active_source != "udp" and local_stream:
                 try:
                     data, overflowed = local_stream.read(chunk_size)
-                    audio_block = data.flatten()
+                    if data is not None and len(data) > 0:
+                        audio_block = data.flatten()
                 except Exception:
                     pass
 

@@ -20,6 +20,9 @@ class CommandNormalizer:
     COMMAND_BACKWARD = "đi lùi"
     COMMAND_LEFT = "rẽ trái"
     COMMAND_RIGHT = "rẽ phải"
+    COMMAND_CHEO_TRAI = "chéo trái"
+    COMMAND_CHEO_PHAI = "chéo phải"
+    COMMAND_XOAY_TRON = "xoay tròn"
     COMMAND_STOP = "dừng"
 
     def __init__(self):
@@ -54,6 +57,16 @@ class CommandNormalizer:
         # 1. ĐỘ ƯU TIÊN CAO NHẤT: DỪNG (STOP)
         if self._check_stop(cleaned, ascii_str):
             return self.COMMAND_STOP
+
+        # 1.5 KIỂM TRA ĐI CHÉO TRÁI / CHÉO PHẢI
+        if "cheo trai" in ascii_str or "cheo trai" in cleaned or "tien trai" in ascii_str:
+            return self.COMMAND_CHEO_TRAI
+        if "cheo phai" in ascii_str or "cheo phai" in cleaned or "tien phai" in ascii_str:
+            return self.COMMAND_CHEO_PHAI
+
+        # 1.6 KIỂM TRA XOAY VÒNG TRÒN / XOAY 360 ĐỘ
+        if any(x in ascii_str for x in ["xoay tron", "vong tron", "quay 360", "xoay 360", "quay tron", "xoay qua", "xoay vong"]):
+            return self.COMMAND_XOAY_TRON
 
         # 2. LỌC CÁC CÂU QUAN SÁT / GIAO TIẾP KHÔNG PHẢI LỆNH
         # Kiểm tra lần lượt các hướng di chuyển

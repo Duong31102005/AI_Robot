@@ -10,7 +10,7 @@ DRY_RUN = os.getenv("DRY_RUN", "False").lower() in ("true", "1", "yes")
 SEND_COMMAND_INTERVAL = float(os.getenv("SEND_COMMAND_INTERVAL", 0.3))  # Giây giữa các lần gửi lệnh HTTP
 
 # --- Vision & Camera Configuration ---
-CAMERA_SOURCE = os.getenv("CAMERA_SOURCE", "http://192.168.61.135:8080/video_feed")
+CAMERA_SOURCE = os.getenv("CAMERA_SOURCE", f"http://{PI_IP}:8080/video_feed")
 try:
     CAMERA_INDEX = int(CAMERA_SOURCE)
 except ValueError:
@@ -40,11 +40,11 @@ STT_VAD = os.getenv("STT_VAD", "silero").lower()  # "silero" (mặc định cho 
 STT_USE_GPU = os.getenv("STT_USE_GPU", "True").lower() in ("true", "1", "yes")
 STT_CPU_THREADS = int(os.getenv("STT_CPU_THREADS", 4))
 
-# PhoWhisper Clean Decode Parameters (Anti-Hallucination)
-STT_BEAM_SIZE = int(os.getenv("STT_BEAM_SIZE", 5))
-STT_BEST_OF = int(os.getenv("STT_BEST_OF", 5))
+# PhoWhisper Optimized Decode Parameters (UGREEN Webcam Mic Accuracy Boost)
+STT_BEAM_SIZE = int(os.getenv("STT_BEAM_SIZE", 10))
+STT_BEST_OF = int(os.getenv("STT_BEST_OF", 10))
 STT_TEMPERATURE = float(os.getenv("STT_TEMPERATURE", 0.0))
-STT_PATIENCE = float(os.getenv("STT_PATIENCE", 1.0))
+STT_PATIENCE = float(os.getenv("STT_PATIENCE", 2.0))
 STT_CONDITION_ON_PREVIOUS_TEXT = False
 
 PHOWHISPER_MODEL_NAME = os.getenv("PHOWHISPER_MODEL_NAME", "diepho/PhoWhisper-small-ct2")
