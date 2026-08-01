@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot AI - Web Dashboard (Port 8090)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid #334155;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .title {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            background: #1e293b;
+            border: 1px solid #334155;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+        }
+
+        .status-badge.connected .dot {
+            background: #22c55e;
+            box-shadow: 0 0 10px #22c55e;
+        }
+
+        main {
+            flex: 1;
+            padding: 24px;
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .panel {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .panel-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .camera-container {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #020617;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #334155;
+        }
+
+        .camera-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            padding: 14px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .card-label {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .card-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #38bdf8;
+        }
+
+        .dpad-container {
+            display: grid;
+            grid-template-columns: repeat(3, 70px);
+            grid-template-rows: repeat(3, 70px);
+            gap: 10px;
+            justify-content: center;
+            margin: 20px auto;
+        }
+
+        .btn {
+            background: #334155;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:hover {
+            background: #475569;
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+            background: #0284c7;
+        }
+
+        .btn-stop {
+            background: #dc2626;
+        }
+
+        .btn-stop:hover {
+            background: #b91c1c;
+        }
+
+        .btn-beep {
+            background: #eab308;
+            color: #0f172a;
+        }
+
+        .btn-beep:hover {
+            background: #ca8a04;
+        }
+
+        .btn-up { grid-column: 2; grid-row: 1; }
+        .btn-left { grid-column: 1; grid-row: 2; }
+        .btn-stop-grid { grid-column: 2; grid-row: 2; }
+        .btn-right { grid-column: 3; grid-row: 2; }
+        .btn-down { grid-column: 2; grid-row: 3; }
+
+        .ip-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .ip-input {
+            flex: 1;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .btn-connect {
+            background: #0284c7;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        @media (max-width: 900px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title">🤖 ROBOT AI DASHBOARD (PORT 8090)</div>
+        <div class="status-badge" id="statusBadge">
+            <div class="dot" id="statusDot"></div>
+            <span id="statusText">DISCONNECTED</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Cột Trái: Camera Feed & Telemetry -->
+        <div class="panel">
+            <div class="panel-title">📷 LUỒNG VIDEO CAMERA REALTIME</div>
+            <div class="camera-container">
+                <img id="cameraFeed" class="camera-img" src="http://192.168.61.135:8080/video_feed" alt="Camera Feed Loading..." onerror="this.alt='Camera Stream Offline'">
+            </div>
+
+            <div class="panel-title" style="margin-top: 10px;">📊 THÔNG SỐ CẢM BIẾN & TELEMETRY</div>
+            <div class="telemetry-grid">
+                <div class="card">
+                    <div class="card-label">Chế độ Mode</div>
+                    <div class="card-value" id="valMode">ROS2</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Điện áp Pin</div>
+                    <div class="card-value" id="valBattery">12.6V</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Khoảng cách Trước</div>
+                    <div class="card-value" id="valFront">0.0 cm</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Góc Yaw (Xoay)</div>
+                    <div class="card-value" id="valYaw">0.0°</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Góc Pitch</div>
+                    <div class="card-value" id="valPitch">0.0°</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Góc Roll</div>
+                    <div class="card-value" id="valRoll">0.0°</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cột Phải: Bảng điều khiển D-Pad -->
+        <div class="panel">
+            <div class="panel-title">⚙️ ĐỊA CHỈ KẾT NỐI WEBSOCKET</div>
+            <div class="ip-bar">
+                <input type="text" id="wsUrlInput" class="ip-input" value="ws://192.168.61.135:8090">
+                <button class="btn btn-connect" onclick="connectWebSocket()">Kết nối</button>
+            </div>
+
+            <div class="panel-title" style="margin-top: 15px;">🎮 ĐIỀU KHIỂN BÁNH XE (D-PAD)</div>
+            <div class="dpad-container">
+                <button class="btn btn-up" onmousedown="sendMove('tien', 180)" onmouseup="sendMove('dung', 0)">▲</button>
+                <button class="btn btn-left" onmousedown="sendMove('trai', 180)" onmouseup="sendMove('dung', 0)">◀</button>
+                <button class="btn btn-stop btn-stop-grid" onclick="sendMove('dung', 0)">⏹</button>
+                <button class="btn btn-right" onmousedown="sendMove('phai', 180)" onmouseup="sendMove('dung', 0)">▶</button>
+                <button class="btn btn-down" onmousedown="sendMove('lui', 180)" onmouseup="sendMove('dung', 0)">▼</button>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button class="btn btn-beep" style="flex: 1; padding: 12px;" onclick="sendBeep()">🔔 Bấm Còi (Beep)</button>
+                <button class="btn btn-stop" style="flex: 1; padding: 12px;" onclick="sendMove('dung', 0)">🛑 Dừng Phanh</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let ws = null;
+
+        function connectWebSocket() {
+            const url = document.getElementById('wsUrlInput').value.trim();
+            console.log("Connecting to WebSocket:", url);
+
+            if (ws) {
+                ws.close();
+            }
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                console.log("WebSocket Connected!");
+                const badge = document.getElementById('statusBadge');
+                badge.classList.add('connected');
+                document.getElementById('statusText').innerText = "CONNECTED (8090)";
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'telemetry' && msg.data) {
+                        const data = msg.data;
+                        if (data.mode) document.getElementById('valMode').innerText = data.mode;
+                        if (data.battery) document.getElementById('valBattery').innerText = data.battery.toFixed(1) + "V";
+                        if (data.front_distance !== undefined) document.getElementById('valFront').innerText = data.front_distance.toFixed(1) + " cm";
+                        if (data.yaw !== undefined) document.getElementById('valYaw').innerText = data.yaw.toFixed(1) + "°";
+                        if (data.pitch !== undefined) document.getElementById('valPitch').innerText = data.pitch.toFixed(1) + "°";
+                        if (data.roll !== undefined) document.getElementById('valRoll').innerText = data.roll.toFixed(1) + "°";
+                    }
+                } catch (e) {
+                    console.error("WS Parse error:", e);
+                }
+            };
+
+            ws.onclose = () => {
+                console.log("WebSocket Disconnected");
+                const badge = document.getElementById('statusBadge');
+                badge.classList.remove('connected');
+                document.getElementById('statusText').innerText = "DISCONNECTED";
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocket Error:", err);
+            };
+        }
+
+        function sendMove(direction, speed) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const payload = JSON.stringify({
+                    type: 'move',
+                    direction: direction,
+                    speed: speed
+                });
+                ws.send(payload);
+                console.log("Sent move command:", payload);
+            }
+        }
+
+        function sendBeep() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'beep' }));
+                console.log("Sent beep command");
+            }
+        }
+
+        // Tự động kết nối khi vừa nạp trang Web
+        window.onload = () => {
+            connectWebSocket();
+        };
+    </script>
+</body>
+</html>

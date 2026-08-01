@@ -33,6 +33,21 @@ def run_combined():
 
 
 def main():
+    # Hỗ trợ truyền tham số dòng lệnh trực tiếp (Ví dụ: python main.py 5 hoặc python main.py full)
+    if len(sys.argv) > 1:
+        arg = sys.argv[1].lower().strip()
+        if arg in ("5", "full", "--full", "all"):
+            run_combined()
+            return
+        elif arg in ("2", "stt", "--stt"):
+            from scripts.main_stt import main as run_stt
+            run_stt()
+            return
+        elif arg in ("1", "vision", "--vision"):
+            from scripts.main_vision import main as run_vision
+            run_vision()
+            return
+
     while True:
         print_menu()
         choice = input("Nhập lựa chọn của bạn (0-5): ").strip()
