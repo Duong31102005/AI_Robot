@@ -199,8 +199,9 @@ class WhisperSTT:
         # Ghi âm ra file WAV tạm thời cho Whisper
         write(AUDIO_OUTPUT_PATH, self.sample_rate, (audio_data * 32767).astype(np.int16))
 
-        # Nhận dạng giọng nói với Whisper
+        # Nhận dạng giọng nói với Whisper (Tối ưu hóa beam_size=1 để nhận diện siêu nhanh)
         try:
+            start_transcribe = time.time()
             use_fp16 = (self.device == "cuda")
             result = self.model.transcribe(
                 AUDIO_OUTPUT_PATH,
@@ -208,8 +209,11 @@ class WhisperSTT:
                 temperature=WHISPER_TEMPERATURE,
                 condition_on_previous_text=False,
                 fp16=use_fp16,
-                no_speech_threshold=WHISPER_NO_SPEECH_THRESHOLD
+                no_speech_threshold=WHISPER_NO_SPEECH_THRESHOLD,
+                beam_size=1,
+                best_of=1
             )
+            logger.info(f"[STT] Whisper processing took {time.time() - start_transcribe:.2f}s")
         except Exception as e:
             logger.error(f"[STT] Whisper error: {e}")
             return ""
@@ -226,7 +230,7 @@ class WhisperSTT:
             logger.info("[STT] No speech recognized")
             return ""
 
-        logger.info(f"[STT] Whisper: '{text}'")
+        logger.info(f"[STT] Whisper transcribed: '{text}'")
         return text
 
     def record_and_transcribe(self, duration: int = RECORD_SECONDS, output_file: str = AUDIO_OUTPUT_PATH) -> str:

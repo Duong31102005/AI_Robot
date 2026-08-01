@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import cv2
+import threading
 
 # Đảm bảo import các module từ thư mục gốc dự án
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -56,6 +57,10 @@ def main():
 
             # 3. Phát hiện người qua YOLO11s
             detections = detector.detect(frame)
+            
+            # Gửi nhận diện YOLO lên ROS2 qua cổng 8001
+            if detections:
+                threading.Thread(target=pi_client.send_detections, args=(detections,), daemon=True).start()
 
             # 4. Lựa chọn target duy nhất (người gần robot nhất - BBox lớn nhất)
             target = select_target(detections)

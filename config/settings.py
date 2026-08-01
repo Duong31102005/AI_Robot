@@ -36,7 +36,7 @@ AUDIO_OUTPUT_PATH = "input.wav"
 LANGUAGE = "vi"
 
 # --- VAD & Continuous Speech Detection Configuration ---
-VAD_RMS_THRESHOLD = float(os.getenv("VAD_RMS_THRESHOLD", 0.00003))         # Ngưỡng năng lượng RMS thích ứng với Mic máy tính
+VAD_RMS_THRESHOLD = float(os.getenv("VAD_RMS_THRESHOLD", 0.003))          # Ngưỡng năng lượng RMS thích ứng với Mic máy tính
 VAD_SILENCE_DURATION = float(os.getenv("VAD_SILENCE_DURATION", 0.4))       # Thời gian im lặng ngắt câu siêu nhanh (0.4s)
 VAD_MIN_SPEECH_DURATION = float(os.getenv("VAD_MIN_SPEECH_DURATION", 0.25))# Thời gian nói tối thiểu (giây)
 VAD_MAX_SPEECH_DURATION = float(os.getenv("VAD_MAX_SPEECH_DURATION", 5.0)) # Thời gian nói tối đa (giây)

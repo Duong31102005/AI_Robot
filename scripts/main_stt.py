@@ -103,6 +103,7 @@ def main():
                 greeting = "Dạ, Kim Qui nghe đây!"
                 logger.info(f"[STT] WAKE WORD DETECTED -> Respondent (Pi 4 Speaker): '{greeting}'")
                 threading.Thread(target=pi_client.send_tts, args=(greeting,), daemon=True).start()
+                threading.Thread(target=pi_client.send_conversation, args=("Kim Qui ơi", greeting), daemon=True).start()
                 continue
 
             # 1. Kiểm tra Lệnh di chuyển Robot (Chỉ kích hoạt khi gọi Kim Qui)
@@ -115,6 +116,7 @@ def main():
                     pi_client.send_command("dừng")
                     response_str = "Kim Qui đã dừng lại"
                     threading.Thread(target=pi_client.send_tts, args=(response_str,), daemon=True).start()
+                    threading.Thread(target=pi_client.send_conversation, args=(prompt, response_str), daemon=True).start()
                 else:
                     is_robot_moving = True
                     logger.info(f"[STT] WAKE COMMAND: '{raw_text}' -> '{command}' (Robot bắt đầu di chuyển)")
@@ -122,6 +124,7 @@ def main():
                     response_str = f"Kim Qui đã nhận lệnh {command}"
                     if success:
                         threading.Thread(target=pi_client.send_tts, args=(response_str,), daemon=True).start()
+                        threading.Thread(target=pi_client.send_conversation, args=(prompt, response_str), daemon=True).start()
                     elif not success:
                         logger.warning("Gửi lệnh thất bại.")
             else:
@@ -132,6 +135,7 @@ def main():
                     if reply:
                         logger.info(f"[STT] Sending TTS to Pi 4 Bluetooth Speaker: '{reply}'")
                         threading.Thread(target=pi_client.send_tts, args=(reply,), daemon=True).start()
+                        threading.Thread(target=pi_client.send_conversation, args=(prompt, reply), daemon=True).start()
                 else:
                     logger.warning(f"Bỏ qua câu trò chuyện (LLM không khả dụng): '{prompt}'")
 

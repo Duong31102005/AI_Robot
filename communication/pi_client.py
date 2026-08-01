@@ -67,7 +67,7 @@ class PiClient:
             self.last_connected_status = False
             return False
 
-    def send_tts(self, text: str, timeout: float = 3.0) -> bool:
+    def send_tts(self, text: str, timeout: float = 5.0) -> bool:
         """Gửi câu văn bản TTS xuống Raspberry Pi để đọc ra Loa Bluetooth cắm ở Pi."""
         if not text:
             return False
@@ -76,23 +76,80 @@ class PiClient:
             logger.info(f"[PI] [DRY_RUN] TTS simulated: '{text}'")
             return True
 
-        tts_url = self.url.replace("/command", "/tts")
+        # Ưu tiên gửi lên Web Backend (cổng 8000) để phát giọng đọc tiếng Việt tự nhiên AI
+        from urllib.parse import urlparse
+        parsed_url = urlparse(self.url)
+        web_tts_url = f"http://{parsed_url.hostname}:8000/api/robot/speak"
         try:
             response = requests.post(
-                tts_url,
+                web_tts_url,
                 json={"text": text},
                 timeout=timeout
             )
             is_ok = (response.status_code == 200)
             if is_ok:
-                logger.info(f"[PI] TTS sent to Pi Bluetooth speaker: '{text}'")
+                logger.info(f"[PI] Natural TTS sent to Pi successfully: '{text}'")
             else:
-                logger.warning(f"[PI] TTS send failed HTTP {response.status_code}")
+                logger.warning(f"[PI] Natural TTS failed HTTP {response.status_code}, falling back to port 8001")
+                # Fallback về cổng 8001 của ROS2 http_bridge
+                tts_url = self.url.replace("/command", "/tts")
+                requests.post(tts_url, json={"text": text}, timeout=3.0)
             return is_ok
         except Exception as e:
-            logger.error(f"[PI] Error sending TTS to Pi: {e}")
+            logger.error(f"[PI] Error sending TTS: {e}, falling back to port 8001")
+            try:
+                # Fallback về cổng 8001 của ROS2 http_bridge
+                tts_url = self.url.replace("/command", "/tts")
+                requests.post(tts_url, json={"text": text}, timeout=3.0)
+            except Exception:
+                pass
             return False
 
     def is_connected(self) -> bool:
         """Trả về trạng thái kết nối gần nhất."""
         return self.last_connected_status
+
+    def send_conversation(self, prompt: str, reply: str, mission_id: int = 1) -> bool:
+        """Gửi nhật ký hội thoại lên HTTP bridge của Pi (port 8001)."""
+        if not prompt or not reply:
+            return False
+        if self.dry_run:
+            logger.info(f"[PI] [DRY_RUN] Conversation simulated: User='{prompt}' -> Robot='{reply}'")
+            return True
+
+        import json
+        conversation_url = self.url.replace("/command", "/conversation")
+        try:
+            payload = {
+                "prompt": prompt,
+                "reply": reply,
+                "mission_id": mission_id
+            }
+            response = requests.post(
+                conversation_url,
+                json={"text": json.dumps(payload)},
+                timeout=3.0
+            )
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"[PI] Error sending conversation to Pi: {e}")
+            return False
+
+    def send_detections(self, detections: list, timeout: float = 1.0) -> bool:
+        """Gửi danh sách vật thể YOLO nhận dạng được lên HTTP bridge của Pi (port 8001)."""
+        if not detections:
+            return False
+        if self.dry_run:
+            return True
+
+        import json
+        detection_url = self.url.replace("/command", "/detection")
+        try:
+            response = requests.post(
+                detection_url,
+                json={"text": json.dumps(detections)},
+                timeout=timeout
+            )
+            return response.status_code == 200
+        except Exception as e:
+            return False
