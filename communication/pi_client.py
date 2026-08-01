@@ -67,8 +67,8 @@ class PiClient:
             self.last_connected_status = False
             return False
 
-    def send_tts(self, text: str, timeout: float = 5.0) -> bool:
-        """Gửi câu văn bản TTS xuống Raspberry Pi để đọc ra Loa Bluetooth cắm ở Pi."""
+    def send_tts(self, text: str, timeout: float = 3.0) -> bool:
+        """Gửi câu văn bản TTS xuống Raspberry Pi (Cổng 8001 /tts) để đọc ra Loa Bluetooth cắm ở Pi."""
         if not text:
             return False
 
@@ -76,33 +76,21 @@ class PiClient:
             logger.info(f"[PI] [DRY_RUN] TTS simulated: '{text}'")
             return True
 
-        # Ưu tiên gửi lên Web Backend (cổng 8000) để phát giọng đọc tiếng Việt tự nhiên AI
-        from urllib.parse import urlparse
-        parsed_url = urlparse(self.url)
-        web_tts_url = f"http://{parsed_url.hostname}:8000/api/robot/speak"
+        tts_url = self.url.replace("/command", "/tts")
         try:
             response = requests.post(
-                web_tts_url,
+                tts_url,
                 json={"text": text},
                 timeout=timeout
             )
             is_ok = (response.status_code == 200)
             if is_ok:
-                logger.info(f"[PI] Natural TTS sent to Pi successfully: '{text}'")
+                logger.info(f"[PI] TTS sent to Pi Speaker successfully: '{text}' (HTTP 200)")
             else:
-                logger.warning(f"[PI] Natural TTS failed HTTP {response.status_code}, falling back to port 8001")
-                # Fallback về cổng 8001 của ROS2 http_bridge
-                tts_url = self.url.replace("/command", "/tts")
-                requests.post(tts_url, json={"text": text}, timeout=3.0)
+                logger.warning(f"[PI] TTS send failed HTTP {response.status_code}")
             return is_ok
         except Exception as e:
-            logger.error(f"[PI] Error sending TTS: {e}, falling back to port 8001")
-            try:
-                # Fallback về cổng 8001 của ROS2 http_bridge
-                tts_url = self.url.replace("/command", "/tts")
-                requests.post(tts_url, json={"text": text}, timeout=3.0)
-            except Exception:
-                pass
+            logger.error(f"[PI] Error sending TTS to Pi: {e}")
             return False
 
     def is_connected(self) -> bool:

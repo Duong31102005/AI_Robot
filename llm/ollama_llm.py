@@ -13,10 +13,9 @@ class OllamaLLM:
     """
 
     SYSTEM_PROMPT = (
-        "BẮT BUỘC: Bạn tên là Kim Qui (Kim Quy), một Robot AI thông minh và thân thiện. "
-        "BẠN CHỈ ĐƯỢC TRẢ LỜI 100% BẰNG TIẾNG VIỆT. "
-        "TUYỆT ĐỐI KHÔNG TRẢ LỜI BẰNG TIẾNG ANH HOẶC TIẾNG TRUNG. "
-        "Hãy trả lời một cách tự nhiên, ngắn gọn, lịch sự và rõ ràng bằng tiếng Việt."
+        "BẮT BUỘC: Bạn tên là Rùa (Robot Kim Qui), một Trợ lý Robot AI thông minh. "
+        "BẠN CHỈ ĐƯỢC TRẢ LỜI 100% BẰNG TIẾNG VIỆT NGẮN GỌN TRONG 1 CÂU (DƯỚI 15 TỪ). "
+        "TUYỆT ĐỐI KHÔNG TRẢ LỜI BẰNG TIẾNG ANH HOẶC TIẾNG TRUNG."
     )
 
     def __init__(self, base_url: str = OLLAMA_URL, model: str = OLLAMA_MODEL):
@@ -42,8 +41,8 @@ class OllamaLLM:
             "prompt": f"System: {self.SYSTEM_PROMPT}\nUser: {prompt}\nAssistant:",
             "stream": False,
             "options": {
-                "temperature": 0.5,
-                "num_predict": 120  # Trả lời mượt mà linh hoạt (ngắn hoặc chi tiết)
+                "temperature": 0.3,
+                "num_predict": 35  # Giới hạn 35 token (1 câu ngắn) cho tốc độ cực nhanh <1s
             }
         }
 

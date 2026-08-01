@@ -28,25 +28,38 @@ YOLO_IMAGE_SIZE = int(os.getenv("YOLO_IMAGE_SIZE", 640))
 YOLO_PERSON_CLASS = 0  # Class ID của 'person' trong COCO dataset
 VISION_DEBUG = os.getenv("VISION_DEBUG", "True").lower() in ("true", "1", "yes")
 
-# --- Audio & Speech Recognition Configuration ---
+# --- Audio & Speech Recognition Engine Configuration ---
 SAMPLE_RATE = 16000
 RECORD_SECONDS = 5
-WHISPER_MODEL_SIZE = "base"
 AUDIO_OUTPUT_PATH = "input.wav"
 LANGUAGE = "vi"
 
+# Engine selection: PhoWhisper Large (VinAI PhoWhisper-large CTranslate2)
+STT_ENGINE = os.getenv("STT_ENGINE", "phowhisper").lower()
+STT_VAD = os.getenv("STT_VAD", "silero").lower()  # "silero" (mặc định cho độ chính xác cao) hoặc "webrtc"
+STT_USE_GPU = os.getenv("STT_USE_GPU", "True").lower() in ("true", "1", "yes")
+STT_CPU_THREADS = int(os.getenv("STT_CPU_THREADS", 4))
+
+# PhoWhisper Clean Decode Parameters (Anti-Hallucination)
+STT_BEAM_SIZE = int(os.getenv("STT_BEAM_SIZE", 5))
+STT_BEST_OF = int(os.getenv("STT_BEST_OF", 5))
+STT_TEMPERATURE = float(os.getenv("STT_TEMPERATURE", 0.0))
+STT_PATIENCE = float(os.getenv("STT_PATIENCE", 1.0))
+STT_CONDITION_ON_PREVIOUS_TEXT = False
+
+PHOWHISPER_MODEL_NAME = os.getenv("PHOWHISPER_MODEL_NAME", "diepho/PhoWhisper-small-ct2")
+MOONSHINE_MODEL_NAME = os.getenv("MOONSHINE_MODEL_NAME", "onnx-community/moonshine-tiny-vi-ONNX")
+WHISPER_MODEL_SIZE = PHOWHISPER_MODEL_NAME  # Tương thích ngược
+
 # --- VAD & Continuous Speech Detection Configuration ---
 VAD_RMS_THRESHOLD = float(os.getenv("VAD_RMS_THRESHOLD", 0.003))          # Ngưỡng năng lượng RMS thích ứng với Mic máy tính
-VAD_SILENCE_DURATION = float(os.getenv("VAD_SILENCE_DURATION", 0.4))       # Thời gian im lặng ngắt câu siêu nhanh (0.4s)
-VAD_MIN_SPEECH_DURATION = float(os.getenv("VAD_MIN_SPEECH_DURATION", 0.25))# Thời gian nói tối thiểu (giây)
-VAD_MAX_SPEECH_DURATION = float(os.getenv("VAD_MAX_SPEECH_DURATION", 5.0)) # Thời gian nói tối đa (giây)
-VAD_PRE_ROLL = float(os.getenv("VAD_PRE_ROLL", 0.15))                      # Đệm trước tiếng nói (giây)
+VAD_SILENCE_DURATION = float(os.getenv("VAD_SILENCE_DURATION", 0.8))       # Thời gian im lặng 700-900ms (0.8s)
+VAD_MIN_SPEECH_DURATION = float(os.getenv("VAD_MIN_SPEECH_DURATION", 0.2)) # Thời gian nói tối thiểu (giây)
+VAD_MAX_SPEECH_DURATION = float(os.getenv("VAD_MAX_SPEECH_DURATION", 10.0))# Thời gian nói tối đa (giây)
+VAD_PRE_ROLL = float(os.getenv("VAD_PRE_ROLL", 0.4))                       # Đệm trước tiếng nói (0.4s)
+VAD_POST_ROLL = float(os.getenv("VAD_POST_ROLL", 0.4))                     # Đệm sau tiếng nói (0.4s)
 VAD_NOISE_MULTIPLIER = float(os.getenv("VAD_NOISE_MULTIPLIER", 2.5))       # Gấp 2.5 lần Noise Floor khi calibrate
 CALIBRATION_DURATION = float(os.getenv("CALIBRATION_DURATION", 1.0))       # Thời gian đo tiếng ồn ban đầu (giây)
-
-# --- Whisper Anti-Hallucination Configuration ---
-WHISPER_NO_SPEECH_THRESHOLD = float(os.getenv("WHISPER_NO_SPEECH_THRESHOLD", 0.6))
-WHISPER_TEMPERATURE = float(os.getenv("WHISPER_TEMPERATURE", 0.0))
 
 # --- Offline LLM (Ollama) & TTS Configuration ---
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
