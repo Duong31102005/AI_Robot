@@ -41,7 +41,7 @@ class PiClient:
 
     check_connection = test_connection
 
-    def send_command(self, text: str, timeout: float = 3.0) -> bool:
+    def send_command(self, text: str, timeout: float = 0.5) -> bool:
         """Gửi lệnh văn bản dạng JSON {"text": text} tới Raspberry Pi."""
         if not text:
             logger.warning("[PI] Lệnh rỗng, không gửi.")

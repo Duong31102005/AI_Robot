@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from vision.camera import Camera
 from vision.yolo_detector import YOLOPersonDetector
 from vision.person_tracker import select_target, calculate_person_position, draw_debug_overlay
+from vision.yolo_stream_server import start_yolo_stream_server, update_yolo_frame
 from communication.pi_client import PiClient
 from config.settings import VISION_DEBUG, SEND_COMMAND_INTERVAL, DRY_RUN
 from utils.logger import get_logger
@@ -18,6 +19,9 @@ logger = get_logger("MainVision")
 
 def main():
     logger.info("--- KHỞI CHẠY HỆ THỐNG PHÁT HIỆN & THEO DÕI NGƯỜI DÙNG YOLO11s + RASPBERRY PI ---")
+
+    # Khởi chạy HTTP Streamer phát Video YOLO AI đè khung nhận diện lên Web (Cổng 5050)
+    start_yolo_stream_server(5050)
 
     # 1. Khởi tạo Camera
     camera = Camera()
@@ -38,6 +42,9 @@ def main():
     last_send_time = 0.0
     last_sent_action = ""
     fps = 0.0
+    frame_count = 0
+    cached_detections = []
+    cached_target = None
 
     try:
         while True:
@@ -47,6 +54,7 @@ def main():
                 break
 
             h, w = frame.shape[:2]
+            frame_count += 1
 
             # Tính toán FPS
             curr_time = time.time()
@@ -55,11 +63,16 @@ def main():
                 fps = 1.0 / time_diff
             prev_time = curr_time
 
-            # 3. Phát hiện người qua YOLO11s
-            detections = detector.detect(frame)
-            
-            # Gửi nhận diện YOLO lên ROS2 qua cổng 8001
-            if detections:
+            # 3. Phát hiện người qua YOLO11n (Chạy AI mỗi 2 frame để tối ưu FPS cực mượt)
+            if frame_count % 2 == 0 or not cached_detections:
+                cached_detections = detector.detect(frame)
+                cached_target = select_target(cached_detections)
+
+            detections = cached_detections
+            target = cached_target
+
+            # Gửi nhận diện YOLO lên ROS2 qua cổng 8001 theo khoảng thời gian (tránh tạo 30 thread/giây gây lag GIL)
+            if detections and (curr_time - last_send_time) >= SEND_COMMAND_INTERVAL:
                 threading.Thread(target=pi_client.send_detections, args=(detections,), daemon=True).start()
 
             # 4. Lựa chọn target duy nhất (người gần robot nhất - BBox lớn nhất)
@@ -94,11 +107,11 @@ def main():
                 # Không phát hiện người -> Dừng robot
                 action_text = "giu_nguyen"
 
-            # 5. Gửi lệnh HTTP tới Raspberry Pi theo khoảng thời gian SEND_COMMAND_INTERVAL
+            # 5. Gửi lệnh HTTP tới Raspberry Pi theo khoảng thời gian SEND_COMMAND_INTERVAL (Async Thread ngầm không làm lag video)
             if (curr_time - last_send_time) >= SEND_COMMAND_INTERVAL:
                 # Gửi lệnh tới Pi (hoặc khi lệnh thay đổi)
                 if action_text != last_sent_action or (curr_time - last_send_time) >= 0.8:
-                    pi_client.send_command(action_text)
+                    threading.Thread(target=pi_client.send_command, args=(action_text,), daemon=True).start()
                     last_sent_action = action_text
                     last_send_time = curr_time
 
@@ -112,11 +125,20 @@ def main():
             cv2.putText(debug_frame, f"PI: {conn_str} | ACTION: {action_text.upper()}", (15, h - 20),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
 
-            cv2.imshow("Robot AI Server - YOLO11s Person Detection & Tracking", debug_frame)
+            # Đẩy khung hình đã vẽ nhận diện YOLO AI lên Stream Server (Cổng 5050)
+            update_yolo_frame(debug_frame)
 
-            key = cv2.waitKey(1) & 0xFF
-            if key in (ord('q'), 27):
-                break
+            SHOW_POPUP = os.getenv("SHOW_POPUP", "True").lower() in ("true", "1", "yes")
+            if SHOW_POPUP:
+                try:
+                    cv2.imshow("Robot AI Server - YOLO11s Person Detection & Tracking", debug_frame)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key in (ord('q'), 27):
+                        break
+                except Exception:
+                    time.sleep(0.03)
+            else:
+                time.sleep(0.03)
 
     except KeyboardInterrupt:
         logger.info("Dừng chương trình Vision.")

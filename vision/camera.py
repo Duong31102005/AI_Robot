@@ -1,4 +1,6 @@
 import cv2
+import time
+import threading
 import numpy as np
 from typing import Tuple, Optional, Union
 from config.settings import CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT, TARGET_FPS
@@ -9,6 +11,7 @@ logger = get_logger("VisionCamera")
 class Camera:
     """
     Quản lý kết nối thiết bị Camera/Webcam/IP Stream độc lập khỏi YOLO detector và ROS.
+    Sử dụng luồng ngầm (Thread) để đọc khung hình thời gian thực với độ trễ 0ms.
     """
 
     def __init__(self, camera_index: Union[int, str] = CAMERA_INDEX, width: int = FRAME_WIDTH, height: int = FRAME_HEIGHT, fps: int = TARGET_FPS):
@@ -17,9 +20,13 @@ class Camera:
         self.height = height
         self.fps = fps
         self.cap: Optional[cv2.VideoCapture] = None
+        self._latest_frame: Optional[np.ndarray] = None
+        self._running: bool = False
+        self._lock = threading.Lock()
+        self._thread: Optional[threading.Thread] = None
 
     def open(self) -> bool:
-        """Mở thiết bị camera và thiết lập thông số."""
+        """Mở thiết bị camera và khởi chạy luồng ngầm đọc frame."""
         logger.info(f"[VISION] Opening camera index {self.camera_index}...")
         try:
             self.cap = cv2.VideoCapture(self.camera_index)
@@ -30,31 +37,48 @@ class Camera:
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
             self.cap.set(cv2.CAP_PROP_FPS, self.fps)
-            logger.info(f"[VISION] Camera opened successfully (index {self.camera_index}, {self.width}x{self.height})")
+
+            self._running = True
+            self._thread = threading.Thread(target=self._update_loop, daemon=True)
+            self._thread.start()
+
+            logger.info(f"[VISION] Camera opened successfully with Async Thread (index {self.camera_index}, {self.width}x{self.height})")
             return True
         except Exception as e:
             logger.error(f"[VISION] Camera failed with exception: {e}")
             return False
 
+    def _update_loop(self):
+        """Luồng ngầm liên tục cướp khung hình mới nhất để loại bỏ buffer nghẽn mạng."""
+        while self._running and self.cap and self.cap.isOpened():
+            try:
+                ret, frame = self.cap.read()
+                if ret and frame is not None:
+                    with self._lock:
+                        self._latest_frame = frame
+                else:
+                    time.sleep(0.01)
+            except Exception:
+                time.sleep(0.01)
+
     def is_opened(self) -> bool:
         """Kiểm tra camera có đang hoạt động hay không."""
-        return self.cap is not None and self.cap.isOpened()
+        return self._running and self.cap is not None and self.cap.isOpened()
 
     def read_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
-        """Đọc 1 khung hình từ camera."""
+        """Đọc 1 khung hình mới nhất từ camera (Độ trễ 0ms)."""
         if not self.is_opened():
             return False, None
-        try:
-            ret, frame = self.cap.read()
-            if not ret or frame is None:
+        with self._lock:
+            if self._latest_frame is None:
                 return False, None
-            return True, frame
-        except Exception as e:
-            logger.error(f"[VISION] Error reading frame from camera: {e}")
-            return False, None
+            return True, self._latest_frame.copy()
 
     def release(self):
         """Giải phóng tài nguyên camera."""
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=1.0)
         if self.cap is not None:
             try:
                 self.cap.release()
