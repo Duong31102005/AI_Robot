@@ -1,6 +1,7 @@
 import cv2
 import time
 import threading
+import urllib.request
 import numpy as np
 from typing import Tuple, Optional, Union
 from config.settings import CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT, TARGET_FPS
@@ -11,7 +12,7 @@ logger = get_logger("VisionCamera")
 class Camera:
     """
     Quản lý kết nối thiết bị Camera/Webcam/IP Stream độc lập khỏi YOLO detector và ROS.
-    Sử dụng luồng ngầm (Thread) để đọc khung hình thời gian thực với độ trễ 0ms.
+    Tự động hỗ trợ cả USB Webcam lẫn HTTP MJPEG Stream từ Raspberry Pi với độ trễ 0ms.
     """
 
     def __init__(self, camera_index: Union[int, str] = CAMERA_INDEX, width: int = FRAME_WIDTH, height: int = FRAME_HEIGHT, fps: int = TARGET_FPS):
@@ -22,34 +23,82 @@ class Camera:
         self.cap: Optional[cv2.VideoCapture] = None
         self._latest_frame: Optional[np.ndarray] = None
         self._running: bool = False
+        self._is_http: bool = isinstance(camera_index, str) and (camera_index.startswith("http://") or camera_index.startswith("https://"))
         self._lock = threading.Lock()
         self._thread: Optional[threading.Thread] = None
 
     def open(self) -> bool:
         """Mở thiết bị camera và khởi chạy luồng ngầm đọc frame."""
-        logger.info(f"[VISION] Opening camera index {self.camera_index}...")
-        try:
-            self.cap = cv2.VideoCapture(self.camera_index)
-            if not self.cap.isOpened():
-                logger.error(f"[VISION] Camera failed to open (index {self.camera_index})")
+        logger.info(f"[VISION] Opening camera index {self.camera_index} (HTTP: {self._is_http})...")
+        
+        self._running = True
+
+        if self._is_http:
+            # Kiểm tra thử kết nối HTTP Stream
+            try:
+                req = urllib.request.urlopen(str(self.camera_index), timeout=3.0)
+                req.close()
+                logger.info(f"[VISION] HTTP Camera Stream connected successfully ({self.camera_index})")
+            except Exception as exc:
+                logger.warn(f"[VISION] Direct HTTP check warning: {exc}, will attempt auto-retry loop.")
+
+            self._thread = threading.Thread(target=self._http_update_loop, daemon=True)
+            self._thread.start()
+            return True
+        else:
+            try:
+                self.cap = cv2.VideoCapture(self.camera_index)
+                if not self.cap or not self.cap.isOpened():
+                    logger.error(f"[VISION] Camera failed to open (index {self.camera_index})")
+                    self._running = False
+                    return False
+
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+                self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+
+                self._thread = threading.Thread(target=self._v4l2_update_loop, daemon=True)
+                self._thread.start()
+
+                logger.info(f"[VISION] Camera opened successfully with Async Thread (index {self.camera_index}, {self.width}x{self.height})")
+                return True
+            except Exception as e:
+                logger.error(f"[VISION] Camera failed with exception: {e}")
+                self._running = False
                 return False
 
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-            self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+    def _http_update_loop(self):
+        """Luồng ngầm đọc luồng MJPEG HTTP từ Pi 4 mượt mà 0ms và tự động kết nối lại khi rớt mạng."""
+        url = str(self.camera_index)
+        while self._running:
+            stream = None
+            try:
+                stream = urllib.request.urlopen(url, timeout=3.0)
+                buffer = b''
+                while self._running:
+                    buffer += stream.read(4096)
+                    a = buffer.find(b'\xff\xd8')
+                    b = buffer.find(b'\xff\xd9', a) if a != -1 else -1
+                    if a != -1 and b != -1 and b > a:
+                        jpg = buffer[a:b+2]
+                        buffer = buffer[b+2:]
+                        frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                        if frame is not None:
+                            with self._lock:
+                                self._latest_frame = frame
+                    elif len(buffer) > 500000:
+                        buffer = b''
+            except Exception as err:
+                time.sleep(0.5)
+            finally:
+                if stream:
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
 
-            self._running = True
-            self._thread = threading.Thread(target=self._update_loop, daemon=True)
-            self._thread.start()
-
-            logger.info(f"[VISION] Camera opened successfully with Async Thread (index {self.camera_index}, {self.width}x{self.height})")
-            return True
-        except Exception as e:
-            logger.error(f"[VISION] Camera failed with exception: {e}")
-            return False
-
-    def _update_loop(self):
-        """Luồng ngầm liên tục cướp khung hình mới nhất để loại bỏ buffer nghẽn mạng."""
+    def _v4l2_update_loop(self):
+        """Luồng ngầm liên tục cướp khung hình mới nhất từ cv2.VideoCapture."""
         while self._running and self.cap and self.cap.isOpened():
             try:
                 ret, frame = self.cap.read()
@@ -63,7 +112,7 @@ class Camera:
 
     def is_opened(self) -> bool:
         """Kiểm tra camera có đang hoạt động hay không."""
-        return self._running and self.cap is not None and self.cap.isOpened()
+        return self._running
 
     def read_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
         """Đọc 1 khung hình mới nhất từ camera (Độ trễ 0ms)."""

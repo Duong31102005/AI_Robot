@@ -44,12 +44,16 @@ class PiClient:
     def send_command(self, text: str, timeout: float = 0.5) -> bool:
         """Gửi lệnh văn bản dạng JSON {"text": text} tới Raspberry Pi."""
         if not text:
-            logger.warning("[PI] Lệnh rỗng, không gửi.")
             return False
 
         if self.dry_run:
             logger.info(f"[PI] [DRY_RUN] Command simulated: '{text}' -> {self.url}")
             return True
+
+        import time
+        if hasattr(self, '_last_fail_time'):
+            if not self.last_connected_status and (time.time() - self._last_fail_time < 2.0):
+                return False
 
         try:
             response = requests.post(
@@ -65,7 +69,9 @@ class PiClient:
                 logger.warning(f"[PI] Send failed HTTP {response.status_code}: {response.text}")
             return is_ok
         except Exception as e:
-            logger.error(f"[PI] Error sending command '{text}' to Pi: {e}")
+            self._last_fail_time = time.time()
+            if self.last_connected_status:
+                logger.error(f"[PI] Error sending command '{text}' to Pi: {e}")
             self.last_connected_status = False
             return False
 
