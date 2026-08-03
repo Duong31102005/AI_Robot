@@ -74,8 +74,8 @@ class PhoWhisperSTT:
         self.last_confidence: float = 0.99
         self.last_audio_len_s: float = 0.0
 
-        # Initial Prompt sạch sẽ loại bỏ ảo giác câu từ nước ngoài/chính trị
-        self.initial_prompt: str = "Đây là cuộc trò chuyện tiếng Việt với Robot Rùa, Kim Qui, Phương Nam."
+        # Initial Prompt sạch sẽ định hướng miền từ vựngRobot giao hàng Kim Qui
+        self.initial_prompt: str = "Đây là cuộc trò chuyện Tiếng Việt với Robot giao hàng Kim Qui. Các câu lệnh di chuyển chuẩn: Kim Qui ơi đi thẳng, đi lùi, rẽ trái, rẽ phải, chéo trái, chéo phải, xoay tròn, dừng lại."
 
         # Khởi tạo Silero VAD Engine (800ms silence timeout)
         self.vad_engine = VADEngine(mode=STT_VAD, sample_rate=self.sample_rate)
