@@ -70,9 +70,10 @@ def main():
     else:
         logger.warning("Ollama LLM Server: DISCONNECTED (Chạy 'ollama run qwen2.5:3b' để bật tính năng trò chuyện).")
 
-    logger.info("STT lắng nghe liên tục.")
-    logger.info("Tên kích hoạt Robot: 'KIM QUI' (ví dụ: 'Kim Qui ơi', 'Kim Qui đi thẳng').")
-    logger.info("Nói 'thoát' để kết thúc.")
+    logger.info("==========================================================================")
+    logger.info("🎙️ [CHẾ ĐỘ SẴN SÀNG NGHE AM THANH] ROBOT KIM QUI ĐANG LẮNG NGHE TỪ MICRO CAMERA UGREEN!")
+    logger.info("👉 Hãy nói rõ ràng vào Microphone của Camera UGREEN: 'Kim Qui ơi!' hoặc 'Kim Qui đi thẳng'")
+    logger.info("==========================================================================")
 
     is_robot_moving = False
 

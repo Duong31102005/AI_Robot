@@ -203,6 +203,9 @@ class PhoWhisperSTT:
                         if len(packet) > 0:
                             audio_block = np.frombuffer(packet, dtype=np.float32)
                             active_source = "udp"
+                            if not hasattr(self, '_logged_udp_active'):
+                                logger.info(f"🔊 [MICRO CAMERA UGREEN] 🟢 Đã kết nối luồng âm thanh UDP từ Pi ({addr[0]}:5000)!")
+                                self._logged_udp_active = True
                 except Exception:
                     pass
 
