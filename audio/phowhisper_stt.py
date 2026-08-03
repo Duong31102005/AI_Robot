@@ -158,38 +158,42 @@ class PhoWhisperSTT:
         except Exception:
             udp_sock = None
 
+        use_local_mic = os.getenv("USE_LOCAL_MIC", "False").lower() in ("true", "1", "yes")
         local_stream = None
-        try:
-            mic_device_idx = None
+        if use_local_mic:
             try:
-                devices = sd.query_devices()
-                logger.info("=== QUÉT DANH SÁCH MICRO HỆ THỐNG ===")
-                for i, dev in enumerate(devices):
-                    if dev.get('max_input_channels', 0) > 0:
-                        dev_name = dev.get('name', '')
-                        logger.info(f"  [{i}] {dev_name} (Inputs: {dev['max_input_channels']})")
-                        if mic_device_idx is None and any(kw in dev_name.lower() for kw in ['camera', 'webcam', 'ugreen', 'usb']):
-                            mic_device_idx = i
+                mic_device_idx = None
+                try:
+                    devices = sd.query_devices()
+                    logger.info("=== QUÉT DANH SÁCH MICRO HỆ THỐNG PC ===")
+                    for i, dev in enumerate(devices):
+                        if dev.get('max_input_channels', 0) > 0:
+                            dev_name = dev.get('name', '')
+                            logger.info(f"  [{i}] {dev_name} (Inputs: {dev['max_input_channels']})")
+                            if mic_device_idx is None and any(kw in dev_name.lower() for kw in ['camera', 'webcam', 'ugreen', 'usb']):
+                                mic_device_idx = i
 
-                if mic_device_idx is not None:
-                    logger.info(f"[PhoWhisperSTT] 🎯 ĐÃ TỰ ĐỘNG CHỌN MICRO CAMERA USB: Index [{mic_device_idx}] {devices[mic_device_idx]['name']}")
-                else:
-                    logger.info("[PhoWhisperSTT] Dùng Micro Mặc định hệ thống.")
-            except Exception as exc:
-                logger.warning(f"[PhoWhisperSTT] Error querying mic devices: {exc}")
+                    if mic_device_idx is not None:
+                        logger.info(f"[PhoWhisperSTT] 🎯 ĐÃ CHỌN MICRO CAMERA USB TRÊN PC: Index [{mic_device_idx}] {devices[mic_device_idx]['name']}")
+                    else:
+                        logger.info("[PhoWhisperSTT] Dùng Micro Mặc định hệ thống PC.")
+                except Exception as exc:
+                    logger.warning(f"[PhoWhisperSTT] Error querying mic devices: {exc}")
 
-            local_stream = sd.InputStream(device=mic_device_idx, samplerate=self.sample_rate, channels=1, dtype="float32", blocksize=chunk_size)
-            local_stream.start()
-            logger.info("[PhoWhisperSTT] Local Microphone Stream ACTIVE.")
-        except Exception as e:
-            logger.warning(f"[PhoWhisperSTT] Local mic warning: {e}")
+                local_stream = sd.InputStream(device=mic_device_idx, samplerate=self.sample_rate, channels=1, dtype="float32", blocksize=chunk_size)
+                local_stream.start()
+                logger.info("[PhoWhisperSTT] Local PC Microphone Stream ACTIVE.")
+            except Exception as e:
+                logger.warning(f"[PhoWhisperSTT] Local mic warning: {e}")
+        else:
+            logger.info("[PhoWhisperSTT] 🔒 ĐÃ TẮT MICRO LAPTOP/PC -> CHỈ LẮNG NGHE MICRO CAMERA UGREEN TỪ RASPBERRY PI (UDP 5000)!")
 
         active_source = None
 
         while self.is_running:
             audio_block = None
 
-            # 1. Thử nhận UDP audio từ Pi (Cổng 5000)
+            # 1. Nhận luồng âm thanh Micro từ Raspberry Pi Camera UGREEN (Cổng UDP 5000)
             if udp_sock:
                 try:
                     ready = select.select([udp_sock], [], [], 0.005)
@@ -201,7 +205,7 @@ class PhoWhisperSTT:
                 except Exception:
                     pass
 
-            # 2. Nếu không có UDP từ Pi, dùng duy nhất Local Microphone PC (tránh xới trộn 2 nguồn âm)
+            # 2. Nếu bật USE_LOCAL_MIC=True và không có UDP từ Pi, mới dùng Micro PC
             if audio_block is None and active_source != "udp" and local_stream:
                 try:
                     data, overflowed = local_stream.read(chunk_size)
