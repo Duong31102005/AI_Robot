@@ -159,7 +159,7 @@ class PhoWhisperSTT:
         except Exception:
             udp_sock = None
 
-        use_local_mic = os.getenv("USE_LOCAL_MIC", "False").lower() in ("true", "1", "yes")
+        use_local_mic = os.getenv("USE_LOCAL_MIC", "True").lower() in ("true", "1", "yes")
         local_stream = None
         if use_local_mic:
             try:
@@ -175,7 +175,7 @@ class PhoWhisperSTT:
                                 mic_device_idx = i
 
                     if mic_device_idx is not None:
-                        logger.info(f"[PhoWhisperSTT] 🎯 ĐÃ CHỌN MICRO CAMERA USB TRÊN PC: Index [{mic_device_idx}] {devices[mic_device_idx]['name']}")
+                        logger.info(f"[PhoWhisperSTT] 🎯 CHỌN MICRO CAMERA USB TRÊN PC: Index [{mic_device_idx}] {devices[mic_device_idx]['name']}")
                     else:
                         logger.info("[PhoWhisperSTT] Dùng Micro Mặc định hệ thống PC.")
                 except Exception as exc:
@@ -186,15 +186,13 @@ class PhoWhisperSTT:
                 logger.info("[PhoWhisperSTT] Local PC Microphone Stream ACTIVE.")
             except Exception as e:
                 logger.warning(f"[PhoWhisperSTT] Local mic warning: {e}")
-        else:
-            logger.info("[PhoWhisperSTT] 🔒 ĐÃ TẮT MICRO LAPTOP/PC -> CHỈ LẮNG NGHE MICRO CAMERA UGREEN TỪ RASPBERRY PI (UDP 5000)!")
 
         active_source = None
 
         while self.is_running:
             audio_block = None
 
-            # 1. Nhận luồng âm thanh Micro từ Raspberry Pi Camera UGREEN (Cổng UDP 5000)
+            # 1. Ưu tiên 1: Nhận luồng âm thanh Micro từ Raspberry Pi Camera UGREEN (Cổng UDP 5000)
             if udp_sock:
                 try:
                     ready = select.select([udp_sock], [], [], 0.005)
@@ -204,13 +202,13 @@ class PhoWhisperSTT:
                             audio_block = np.frombuffer(packet, dtype=np.float32)
                             active_source = "udp"
                             if not hasattr(self, '_logged_udp_active'):
-                                logger.info(f"🔊 [MICRO CAMERA UGREEN] 🟢 Đã kết nối luồng âm thanh UDP từ Pi ({addr[0]}:5000)!")
+                                logger.info(f"🔊 [MICRO CAMERA UGREEN] 🟢 Đã nhận luồng âm thanh UDP từ Pi ({addr[0]}:5000)!")
                                 self._logged_udp_active = True
                 except Exception:
                     pass
 
-            # 2. Nếu bật USE_LOCAL_MIC=True và không có UDP từ Pi, mới dùng Micro PC
-            if audio_block is None and active_source != "udp" and local_stream:
+            # 2. Ưu tiên 2: Nếu không có luồng UDP từ Pi 4, tự động dùng Micro PC/Webcam cắm trên máy tính
+            if audio_block is None and local_stream:
                 try:
                     data, overflowed = local_stream.read(chunk_size)
                     if data is not None and len(data) > 0:
