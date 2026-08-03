@@ -103,104 +103,60 @@ class CommandNormalizer:
 
     def _check_stop(self, cleaned: str, ascii_str: str) -> bool:
         """Kiểm tra ý định dừng robot."""
-        # 1. Các cụm từ dừng rõ ràng
-        stop_keywords = [
-            "dừng", "dung", "đứng lại", "dung lai", "ngừng", "ngung",
-            "đừng đi", "dung di", "không đi nữa", "khong di nua", "ngưng"
-        ]
-
-        # Kiểm tra từ/cụm từ dừng bằng Regex (khớp từ hoàn chỉnh)
-        pattern = r"\b(dừng|dung|đứng|ngừng|ngung|ngưng)\b"
-        if re.search(pattern, ascii_str) or re.search(pattern, cleaned):
-            # Cần đảm bảo không phải từ ghép không liên quan
-            # Ví dụ: "đứng" phải là "đứng lại", "đứng ngay", "robot đứng", v.v.
-            # Nếu chỉ có "đứng" hoặc "dừng", hoặc "dừng lại", "đứng lại"
-            if re.search(r"\b(dung|dừng|ngung|ngừng|ngưng)\b", ascii_str):
-                return True
-            if re.search(r"\b(dung lai|đứng lại)\b", ascii_str) or re.search(r"\b(dung lai|đứng lại)\b", cleaned):
-                return True
-
-        if re.search(r"\b(dung di|đừng đi|khong di nua|không đi nữa)\b", ascii_str):
+        stop_patterns = r"\b(dừng|dung|đứng|ngừng|ngung|ngưng|tắt|tat|thôi|thoi)\b"
+        if re.search(stop_patterns, ascii_str) or re.search(stop_patterns, cleaned):
             return True
-
-        if ascii_str in ["thoi", "dung thoi"] or cleaned in ["thôi", "dừng thôi"]:
+        if "dung lai" in ascii_str or "dung xe" in ascii_str or "đứng lại" in cleaned:
             return True
-
         return False
 
     def _check_backward(self, cleaned: str, ascii_str: str) -> bool:
         """Kiểm tra ý định đi lùi."""
-        # Từ khóa chính: lùi / lui
-        if re.search(r"\b(lui|lùi)\b", ascii_str):
+        if re.search(r"\b(lui|lùi)\b", ascii_str) or re.search(r"\b(lui|lùi)\b", cleaned):
             return True
-
-        # Cụm từ: đi về phía sau, đi ra phía sau, tiến ngược lại
         if re.search(r"\b(di|tien|đi|tiến)\s+.*(sau|nguoc lai|ngược lại)\b", ascii_str):
             return True
-
         return False
 
     def _check_left(self, cleaned: str, ascii_str: str) -> bool:
         """Kiểm tra ý định rẽ trái."""
-        # Từ chỉ hướng trái: trái, trai, chái
-        if not re.search(r"\b(trai|trái|chai|chái)\b", ascii_str):
+        if "cheo trai" in ascii_str or "tien trai" in ascii_str:
+            return False  # Đi chéo trái xử lý riêng
+        left_words = r"\b(trai|trái|chai|chái)\b"
+        if not re.search(left_words, ascii_str):
             return False
-
-        # Lọc câu quan sát: "bên trái có...", "bên trái là..." mà không có động từ chuyển hướng
-        if re.search(r"\b(ben|bên)\s+(trai|trái|chai|chái)\s+(co|có|la|là|dang|đang)\b", ascii_str):
-            if not re.search(r"\b(re|rẽ|queo|quẹo|quay|di|đi|chuyen|chuyển)\b", ascii_str):
-                return False
-
-        # Động từ điều hướng trái: rẽ/re, quẹo/queo, quay, đi sang, chuyển sang, sang
-        turn_verbs = r"\b(re|rẽ|queo|quẹo|quay|di sang|đi sang|chuyen sang|chuyển sang|sang)\b"
+        turn_verbs = r"\b(re|rẽ|queo|quẹo|quay|xoay|di|đi|sang|qua|luon|lượn)\b"
         if re.search(turn_verbs, ascii_str):
             return True
-
         return False
 
     def _check_right(self, cleaned: str, ascii_str: str) -> bool:
         """Kiểm tra ý định rẽ phải."""
-        # Từ chỉ hướng phải: phải, phai, pai
-        if not re.search(r"\b(phai|phải|pai)\b", ascii_str):
+        if "cheo phai" in ascii_str or "tien phai" in ascii_str:
+            return False  # Đi chéo phải xử lý riêng
+        right_words = r"\b(phai|phải|pai)\b"
+        if not re.search(right_words, ascii_str):
             return False
-
-        # Lọc câu quan sát: "bên phải có...", "bên phải là..." mà không có động từ chuyển hướng
-        if re.search(r"\b(ben|bên)\s+(phai|phải|pai)\s+(co|có|la|là|dang|đang)\b", ascii_str):
-            if not re.search(r"\b(re|rẽ|queo|quẹo|quay|di|đi|chuyen|chuyển)\b", ascii_str):
-                return False
-
-        # Động từ điều hướng phải: rẽ/re, quẹo/queo, quay, đi sang, chuyển sang, sang
-        turn_verbs = r"\b(re|rẽ|queo|quẹo|quay|di sang|đi sang|chuyen sang|chuyển sang|sang)\b"
+        turn_verbs = r"\b(re|rẽ|queo|quẹo|quay|xoay|di|đi|sang|qua|luon|lượn)\b"
         if re.search(turn_verbs, ascii_str):
             return True
-
         return False
 
     def _check_forward(self, cleaned: str, ascii_str: str) -> bool:
         """Kiểm tra ý định đi thẳng."""
-        # Không trùng với lùi (lui, sau, ngược lại)
+        # Tránh trùng với lùi
         if re.search(r"\b(lui|lùi|sau|nguoc lai|ngược lại)\b", ascii_str):
             return False
-
-        # Không trùng với rẽ trái/phải
-        if re.search(r"\b(re|rẽ|queo|quẹo|quay|trai|trái|chai|chái|phai|phải|pai)\b", ascii_str):
+        # Tránh trùng với rẽ trái/phải/chéo
+        if re.search(r"\b(re|rẽ|queo|quẹo|quay|xoay|trai|trái|chai|chái|phai|phải|pai)\b", ascii_str):
             return False
 
-        # Lọc câu quan sát: "phía trước có người/cửa..." nếu không có động từ di chuyển
-        if re.search(r"\b(phia truoc|phía trước|truoc|trước)\s+(co|có|la|là|dang|đang)\b", ascii_str):
-            if not re.search(r"\b(di|đi|tien|tiến|chay|chạy)\b", ascii_str):
-                return False
-
-        # Các cụm từ chỉ hướng tiến về phía trước (kể cả lỗi Whisper: thang, than, thẳn, thăng)
-        forward_qualifiers = r"\b(thang|thẳng|than|thẳn|thăng|toi|tới|tiep|tiếp|len|lên|phia truoc|phía trước|truoc|trước)\b"
-        movement_verbs = r"\b(di|đi|tien|tiến|chay|chạy)\b"
-
-        # Kết hợp Động từ di chuyển + Từ chỉ hướng tiến
-        if re.search(movement_verbs, ascii_str) and re.search(forward_qualifiers, ascii_str):
+        # Các cụm từ chỉ hướng tiến thẳng
+        if re.search(r"\b(di thang|đi thẳng|tien len|tiến lên|di len|đi lên|di toi|đi tới|chay thang|chạy thẳng|tien toi|tiến tới|di tiep|đi tiếp)\b", ascii_str) or re.search(r"\b(đi thẳng|tiến lên|đi lên|đi tới|chạy thẳng|tiến tới)\b", cleaned):
             return True
 
-        # "tiếp tục đi"
-        if re.search(r"\btiep tuc\s+di\b", ascii_str) or re.search(r"\btiếp tục\s+đi\b", cleaned):
+        # Từ đơn "tiến" hoặc "thẳng" độc lập
+        if re.search(r"\b(tien|tiến|thang|thẳng)\b", ascii_str):
             return True
 
         return False
