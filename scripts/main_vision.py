@@ -40,6 +40,7 @@ def main():
 
     prev_time = time.time()
     last_send_time = 0.0
+    last_tts_warn_time = 0.0
     last_sent_status = ""
     fps = 0.0
     frame_count = 0
@@ -89,23 +90,24 @@ def main():
                 else:
                     delivery_status = "DANG_DI_CHUYEN_GIAO_HANG"
 
-            # 5. Gửi trạng thái AI Giao hàng & Cảnh báo giọng nói ra Loa Robot nếu quá gần hoặc đến điểm giao
+            # 5. Gửi trạng thái AI Giao hàng & Cảnh báo giọng nói ra Loa Robot nếu quá gần hoặc đến điểm giao (Có Cooldown 5s tránh rác HTTP)
             if (curr_time - last_send_time) >= SEND_COMMAND_INTERVAL:
-                if delivery_status != last_sent_status:
-                    if delivery_status == "CANH_BAO_VAT_CAN_GAN":
-                        logger.warning("[SAFETY ALERT] Cảnh báo chướng ngại vật quá gần! Phát loa xin nhường đường...")
-                        warn_text = "Xin lỗi, vui lòng nhường đường cho robot giao hàng, xin cảm ơn!"
-                        threading.Thread(target=pi_client.send_tts, args=(warn_text,), daemon=True).start()
-                        threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
+                if delivery_status == "CANH_BAO_VAT_CAN_GAN" and (curr_time - last_tts_warn_time) > 5.0:
+                    last_tts_warn_time = curr_time
+                    logger.warning("[SAFETY ALERT] Cảnh báo chướng ngại vật quá gần! Phát loa xin nhường đường...")
+                    warn_text = "Xin lỗi, vui lòng nhường đường cho robot giao hàng, xin cảm ơn!"
+                    threading.Thread(target=pi_client.send_tts, args=(warn_text,), daemon=True).start()
+                    threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
 
-                    elif delivery_status == "DA_DEN_DIEM_GIAO_HANG":
-                        logger.info("[DELIVERY SUCCESS] Đã đến điểm giao hàng! Phát loa thông báo...")
-                        arrived_text = "Dạ, Kim Qui đã mang đồ đến điểm giao hàng, xin vui lòng nhận hàng!"
-                        threading.Thread(target=pi_client.send_tts, args=(arrived_text,), daemon=True).start()
-                        threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
+                elif delivery_status == "DA_DEN_DIEM_GIAO_HANG" and (curr_time - last_tts_warn_time) > 5.0:
+                    last_tts_warn_time = curr_time
+                    logger.info("[DELIVERY SUCCESS] Đã đến điểm giao hàng! Phát loa thông báo...")
+                    arrived_text = "Dạ, Kim Qui đã mang đồ đến điểm giao hàng, xin vui lòng nhận hàng!"
+                    threading.Thread(target=pi_client.send_tts, args=(arrived_text,), daemon=True).start()
+                    threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
 
-                    last_sent_status = delivery_status
-                    last_send_time = curr_time
+                last_sent_status = delivery_status
+                last_send_time = curr_time
 
             # 6. Vẽ giao diện Debug trên màn hình (Hiển thị nhãn Giao Hàng & Bounding Box)
             debug_frame = draw_debug_overlay(frame, detections, target=target, fps=fps, show_debug=VISION_DEBUG)
