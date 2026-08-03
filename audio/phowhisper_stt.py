@@ -21,6 +21,7 @@ Mô hình PhoWhisper Large (1.55 tỷ tham số nén CTranslate2 `diepho/PhoWhis
 - Thread-safe (threading.Lock).
 """
 
+import os
 import time
 import socket
 import select
