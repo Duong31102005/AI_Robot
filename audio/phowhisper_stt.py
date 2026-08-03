@@ -160,9 +160,27 @@ class PhoWhisperSTT:
 
         local_stream = None
         try:
-            local_stream = sd.InputStream(samplerate=self.sample_rate, channels=1, dtype="float32", blocksize=chunk_size)
+            mic_device_idx = None
+            try:
+                devices = sd.query_devices()
+                logger.info("=== QUÉT DANH SÁCH MICRO HỆ THỐNG ===")
+                for i, dev in enumerate(devices):
+                    if dev.get('max_input_channels', 0) > 0:
+                        dev_name = dev.get('name', '')
+                        logger.info(f"  [{i}] {dev_name} (Inputs: {dev['max_input_channels']})")
+                        if mic_device_idx is None and any(kw in dev_name.lower() for kw in ['camera', 'webcam', 'ugreen', 'usb']):
+                            mic_device_idx = i
+
+                if mic_device_idx is not None:
+                    logger.info(f"[PhoWhisperSTT] 🎯 ĐÃ TỰ ĐỘNG CHỌN MICRO CAMERA USB: Index [{mic_device_idx}] {devices[mic_device_idx]['name']}")
+                else:
+                    logger.info("[PhoWhisperSTT] Dùng Micro Mặc định hệ thống.")
+            except Exception as exc:
+                logger.warning(f"[PhoWhisperSTT] Error querying mic devices: {exc}")
+
+            local_stream = sd.InputStream(device=mic_device_idx, samplerate=self.sample_rate, channels=1, dtype="float32", blocksize=chunk_size)
             local_stream.start()
-            logger.info("[PhoWhisperSTT] Local Microphone ACTIVE.")
+            logger.info("[PhoWhisperSTT] Local Microphone Stream ACTIVE.")
         except Exception as e:
             logger.warning(f"[PhoWhisperSTT] Local mic warning: {e}")
 
