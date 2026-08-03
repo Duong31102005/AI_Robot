@@ -12,13 +12,13 @@ from vision.yolo_detector import YOLOPersonDetector
 from vision.person_tracker import select_target, calculate_person_position, draw_debug_overlay
 from vision.yolo_stream_server import start_yolo_stream_server, update_yolo_frame
 from communication.pi_client import PiClient
-from config.settings import VISION_DEBUG, SEND_COMMAND_INTERVAL, DRY_RUN
+from config.settings import VISION_DEBUG, SEND_COMMAND_INTERVAL, DRY_RUN, OBSTACLE_CLASSES, YOLO_MODEL
 from utils.logger import get_logger
 
 logger = get_logger("MainVision")
 
 def main():
-    logger.info("--- KHỞI CHẠY HỆ THỐNG ROBOT GIAO HÀNG (DELIVERY AI VISION) YOLO11s + RASPBERRY PI ---")
+    logger.info("--- KHỞI CHẠY HỆ THỐNG ROBOT GIAO HÀNG (DELIVERY AI VISION) YOLO + RASPBERRY PI ---")
 
     # Khởi chạy HTTP Streamer phát Video YOLO AI đè khung nhận diện lên Web (Cổng 5050)
     start_yolo_stream_server(5050)
@@ -29,8 +29,8 @@ def main():
         logger.error("[VISION] Camera failed to open. Dừng hệ thống Vision.")
         sys.exit(1)
 
-    # 2. Khởi tạo YOLO11s Person/Object Detector & Pi Client
-    detector = YOLOPersonDetector()
+    # 2. Khởi tạo YOLO Detector (Hỗ trợ phát hiện chướng ngại vật) & Pi Client
+    detector = YOLOPersonDetector(model_name=YOLO_MODEL, classes=OBSTACLE_CLASSES)
     pi_client = PiClient()
 
     # Kiểm tra kết nối Pi ban đầu
@@ -84,7 +84,7 @@ def main():
 
                 if height_ratio > 0.85:
                     delivery_status = "CANH_BAO_VAT_CAN_GAN"
-                elif 0.35 <= height_ratio <= 0.85 and pos == "CENTER":
+                elif target.get("class_name") == "person" and 0.35 <= height_ratio <= 0.85 and pos == "CENTER":
                     delivery_status = "DA_DEN_DIEM_GIAO_HANG"
                 else:
                     delivery_status = "DANG_DI_CHUYEN_GIAO_HANG"

@@ -19,14 +19,31 @@ FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
 TARGET_FPS = 30
 
-# --- YOLO11 Person Detection Configuration ---
-YOLO_MODEL = os.getenv("YOLO_MODEL", "yolo11n.pt")
+# --- YOLO Configuration ---
+YOLO_MODEL = os.getenv("YOLO_MODEL", "yolo26m.pt")
 YOLO_MODEL_NAME = YOLO_MODEL  # Tương thích ngược
 YOLO_CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", 0.40))
 CONFIDENCE_THRESHOLD = YOLO_CONFIDENCE  # Tương thích ngược
 YOLO_IMAGE_SIZE = int(os.getenv("YOLO_IMAGE_SIZE", 320))
 YOLO_PERSON_CLASS = 0  # Class ID của 'person' trong COCO dataset
 VISION_DEBUG = os.getenv("VISION_DEBUG", "True").lower() in ("true", "1", "yes")
+
+OBSTACLE_CLASSES = [
+    "person",
+    "bicycle",
+    "motorcycle",
+    "car",
+    "truck",
+    "bus",
+    "chair",
+    "bench",
+    "couch",
+    "dining table",
+    "suitcase",
+    "backpack",
+    "dog",
+    "cat"
+]
 
 # --- Audio & Speech Recognition Engine Configuration ---
 SAMPLE_RATE = 16000

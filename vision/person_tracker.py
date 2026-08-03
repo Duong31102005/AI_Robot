@@ -85,7 +85,8 @@ def draw_debug_overlay(
         cv2.circle(output_frame, (cx, cy), 5, (0, 0, 255), -1)
 
         # Label hiển thị
-        label = f"PERSON {conf:.2f} center=({cx},{cy})"
+        class_name = det.get("class_name", "person").upper()
+        label = f"{class_name} {conf:.2f} center=({cx},{cy})"
         if is_target:
             label += " [TARGET]"
 
@@ -99,7 +100,7 @@ def draw_debug_overlay(
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         info_y += 30
 
-    cv2.putText(output_frame, f"Persons: {len(detections)}", (15, info_y),
+    cv2.putText(output_frame, f"Objects: {len(detections)}", (15, info_y),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     info_y += 30
 
