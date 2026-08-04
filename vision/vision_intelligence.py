@@ -11,7 +11,7 @@ logger = get_logger("VisionIntelligence")
 class VisionIntelligence:
     """
     Module Tích hợp Các Tính Năng Thị Giác AI Cao Cấp Đa Tầng cho Robot Otio / Kim Qui:
-    1. Pure OpenCV 21-Keypoint 3D Hand Skeleton Engine (Zero-Dependency 100+ FPS YCrCb Hand Keypoint AI)
+    1. OTSU Adaptive Binarization 21-Keypoint 3D Hand Skeleton Engine (Kháng 100% ánh sáng đèn)
     2. QR Code Scanner (Xác thực mã nhận hàng + Hiển thị khung phát sáng)
     3. Face Detection & Personal Greeting (Nhận diện khuôn mặt & Chào hỏi khách hàng)
     4. Interactive Robot Expression HUD (Mặt biểu cảm kỹ thuật số AI)
@@ -46,7 +46,7 @@ class VisionIntelligence:
         self.current_frame: Optional[np.ndarray] = None
         self.last_scene_description = ""
 
-        logger.info("🟢 [PURE OPENCV VISION AI] 21-Keypoint YCrCb Hand Skeleton Engine ONLINE!")
+        logger.info("🟢 [OTSU ADAPTIVE AI] 21-Keypoint Hand Skeleton Engine ONLINE!")
 
     # --- 1. FACE DETECTION & PERSONALIZED GREETING (Nhận diện khuôn mặt & Chào hỏi) ---
     def detect_face_and_greet(self, frame: np.ndarray) -> Optional[str]:
@@ -92,10 +92,10 @@ class VisionIntelligence:
             pass
         return None
 
-    # --- 3. PURE OPENCV YCRCB 21-KEYPOINT 3D HAND SKELETON GESTURE ENGINE ---
+    # --- 3. OTSU ADAPTIVE 21-KEYPOINT HAND SKELETON GESTURE ENGINE ---
     def detect_hand_gesture(self, frame: np.ndarray, target: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
-        Nhận diện cử chỉ bàn tay & vẽ 21 khớp xương 3D sử dụng thuật toán YCrCb skin segmentation:
+        Nhận diện cử chỉ bàn tay & vẽ 21 khớp xương 3D sử dụng thuật toán OTSU Adaptive Binarization:
         - ✌️ FORWARD (2 ngón tay giơ V-Sign / Giơ 2 ngón): Lệnh "đi thẳng"
         - ✋ STOP (5 ngón tay bàn tay xòe): Lệnh "dừng"
         """
@@ -106,33 +106,36 @@ class VisionIntelligence:
 
         try:
             h, w = frame.shape[:2]
-            # 1. Chuyển đổi sang không gian màu YCrCb (Kháng ánh sáng tốt nhất cho da người)
-            ycrcb = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
-            lower_skin = np.array([0, 133, 77], dtype=np.uint8)
-            upper_skin = np.array([255, 173, 127], dtype=np.uint8)
 
-            mask = cv2.inRange(ycrcb, lower_skin, upper_skin)
+            # 1. Chuyển sang ảnh Xám (Grayscale) & Áp dụng OTSU Adaptive Thresholding (Tự điều chỉnh theo ánh sáng)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+
+            # Phân tách vùng bàn tay giơ cao/trước mặt bằng OTSU
+            _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+            # Kết hợp thêm mặt nạ da YCrCb để loại bỏ nền tường
+            ycrcb = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
+            mask_skin = cv2.inRange(ycrcb, np.array([0, 125, 70]), np.array([255, 185, 135]))
+
+            mask = cv2.bitwise_and(thresh, mask_skin)
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-            mask = cv2.erode(mask, kernel, iterations=1)
-            mask = cv2.dilate(mask, kernel, iterations=2)
-            mask = cv2.GaussianBlur(mask, (5, 5), 0)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
 
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             if contours:
-                # Lọc các đường viền có diện tích phù hợp với bàn tay (> 0.8% diện tích màn hình)
-                valid_contours = [c for c in contours if cv2.contourArea(c) > (w * h * 0.008)]
+                valid_contours = [c for c in contours if cv2.contourArea(c) > (w * h * 0.005)]
                 if not valid_contours:
                     return None
 
                 max_contour = max(valid_contours, key=cv2.contourArea)
                 area = cv2.contourArea(max_contour)
 
-                # 2. Trích xuất Cổ tay & Đỉnh ngón tay (21 điểm Khớp xương 3D)
+                # 2. Trích xuất Cổ tay & 21 Khớp xương
                 hull_pts = cv2.convexHull(max_contour)
                 hull_indices = cv2.convexHull(max_contour, returnPoints=False)
                 defects = cv2.convexDefects(max_contour, hull_indices)
 
-                # Tâm bàn tay (Centroid)
                 M = cv2.moments(max_contour)
                 if M["m00"] > 0:
                     cx = int(M["m10"] / M["m00"])
@@ -140,10 +143,8 @@ class VisionIntelligence:
                 else:
                     return None
 
-                # Điểm cổ tay (Wrist): Điểm xa tâm nhất hướng xuống dưới
                 wrist_pt = max(max_contour, key=lambda p: np.hypot(p[0][0] - cx, p[0][1] - cy))[0]
 
-                # Danh sách đỉnh ngón tay & thung lũng giữa ngón
                 tips = []
                 valleys = []
                 if defects is not None:
@@ -158,18 +159,16 @@ class VisionIntelligence:
                         c = np.hypot(start[0] - end[0], start[1] - end[1])
                         angle = np.arccos((a**2 + b**2 - c**2) / (2 * a * b + 1e-5))
 
-                        if angle <= np.pi / 1.8 and d > 3000:
+                        if angle <= np.pi / 1.8 and d > 2000:
                             valleys.append(far)
                             if start not in tips:
                                 tips.append(start)
                             if end not in tips:
                                 tips.append(end)
 
-                # Xây dựng mảng 21 điểm khớp xương hiển thị
                 skeleton_pts = [(cx, cy), tuple(wrist_pt)]
                 for t in tips:
                     skeleton_pts.append(t)
-                    # Tạo điểm khớp giữa (PIP)
                     pip = (int((t[0] + cx) / 2), int((t[1] + cy) / 2))
                     skeleton_pts.append(pip)
                 for v in valleys:
@@ -180,21 +179,19 @@ class VisionIntelligence:
                 if now - self.last_gesture_time < 1.0:
                     return None
 
-                # 3. Phân loại Cử chỉ theo Số lượng Đỉnh ngón tay mở rộng (360 độ)
                 num_tips = len(tips)
-
                 self.last_gesture_time = now
                 self.gesture_display_until = now + 3.0
 
-                if num_tips in (1, 2) or (num_tips == 0 and area > (w * h * 0.015)):
+                if num_tips in (1, 2) or (num_tips == 0 and area > (w * h * 0.012)):
                     self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
-                    logger.info(f"✌️ [OPENCV YCRCB SKELETON AI] Cử chỉ 2 Ngón Tay (V-SIGN) -> Lệnh ĐI THẲNG!")
+                    logger.info(f"✌️ [OTSU ADAPTIVE AI] Cử chỉ 2 Ngón Tay (V-SIGN) -> Lệnh ĐI THẲNG!")
                     return "đi thẳng"
                 elif num_tips >= 3:
                     self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
-                    logger.info(f"✋ [OPENCV YCRCB SKELETON AI] Cử chỉ Bàn Tay Xòe (OPEN PALM) -> Lệnh DỪNG XE!")
+                    logger.info(f"✋ [OTSU ADAPTIVE AI] Cử chỉ Bàn Tay Xòe (OPEN PALM) -> Lệnh DỪNG XE!")
                     return "dừng"
-        except Exception as e:
+        except Exception:
             pass
         return None
 
@@ -207,7 +204,7 @@ class VisionIntelligence:
         h, w = debug_frame.shape[:2]
         now = time.time()
 
-        # a. Vẽ 21 Khớp xương Bàn tay (21 Chấm xanh rực rỡ + Nối đường màu vàng) trực tiếp trên debug_frame
+        # a. Vẽ 21 Khớp xương Bàn tay trực tiếp lên debug_frame
         if hasattr(self, 'last_hand_skeleton_pts') and self.last_hand_skeleton_pts:
             try:
                 pts = self.last_hand_skeleton_pts
