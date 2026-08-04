@@ -317,6 +317,10 @@ class PhoWhisperSTT:
 
     def listen_and_transcribe(self) -> Tuple[str, float, float]:
         """Lắng nghe liên tục qua Silero VAD (Silence Timeout 800ms) và trả về (text, vad_ms, stt_ms)."""
+        return self.listen_and_stream()
+
+    def listen_and_stream(self, on_partial=None) -> Tuple[str, float, float]:
+        """Lắng nghe liên tục qua Silero VAD và hỗ trợ callback hiển thị phụ đề trực tiếp."""
         self.clear_audio_queue()
 
         chunk_duration = 0.03

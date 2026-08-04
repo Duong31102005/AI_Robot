@@ -104,24 +104,27 @@ class VisionIntelligence:
 
         try:
             h, w = frame.shape[:2]
-            # Cắt vùng thân trên của người mục tiêu (nếu phát hiện người), nếu không dùng vùng giữa màn hình
-            if target and "bbox" in target:
-                tx1, ty1, tx2, ty2 = target["bbox"]
-                # Thân trên từ đầu đến thắt lưng + mở rộng 2 bên tay
+            # Cắt vùng thân trên (từ ngực lên đầu, phía trên mặt bàn) của người mục tiêu
+            if target and ("x1" in target or "bbox" in target):
+                if "bbox" in target:
+                    tx1, ty1, tx2, ty2 = target["bbox"]
+                else:
+                    tx1, ty1, tx2, ty2 = target["x1"], target["y1"], target["x2"], target["y2"]
+
                 crop_y1 = max(0, ty1)
-                crop_y2 = min(h, int(ty1 + (ty2 - ty1) * 0.65))
-                crop_x1 = max(0, int(tx1 - (tx2 - tx1) * 0.2))
-                crop_x2 = min(w, int(tx2 + (tx2 - tx1) * 0.2))
+                crop_y2 = min(h, int(ty1 + (ty2 - ty1) * 0.48))  # Chỉ lấy 48% phía trên (tránh mặt bàn gỗ)
+                crop_x1 = max(0, int(tx1 - (tx2 - tx1) * 0.15))
+                crop_x2 = min(w, int(tx2 + (tx2 - tx1) * 0.15))
                 roi = frame[crop_y1:crop_y2, crop_x1:crop_x2]
             else:
-                roi = frame[int(h * 0.1):int(h * 0.7), int(w * 0.15):int(w * 0.85)]
+                roi = frame[int(h * 0.05):int(h * 0.5), int(w * 0.15):int(w * 0.85)]
 
             if roi is None or roi.size == 0:
                 return None
 
             roi_h, roi_w = roi.shape[:2]
             hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-            lower_skin = np.array([0, 35, 60], dtype=np.uint8)
+            lower_skin = np.array([0, 30, 60], dtype=np.uint8)
             upper_skin = np.array([25, 255, 255], dtype=np.uint8)
 
             mask = cv2.inRange(hsv, lower_skin, upper_skin)
@@ -129,11 +132,15 @@ class VisionIntelligence:
 
             contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             if contours:
-                max_contour = max(contours, key=cv2.contourArea)
+                # Tìm các đường viền bàn tay (loại bỏ viền khuôn mặt ở giữa nếu có)
+                valid_contours = [c for c in contours if cv2.contourArea(c) > (roi_w * roi_h * 0.015)]
+                if not valid_contours:
+                    return None
+
+                max_contour = max(valid_contours, key=cv2.contourArea)
                 area = cv2.contourArea(max_contour)
 
-                # Nếu vùng tay lớn chiếm > 2.5% vùng ROI thân trên
-                if area > (roi_w * roi_h * 0.025):
+                if area > (roi_w * roi_h * 0.015):
                     hull = cv2.convexHull(max_contour, returnPoints=False)
                     defects = cv2.convexDefects(max_contour, hull)
 
@@ -148,7 +155,7 @@ class VisionIntelligence:
                             b = np.linalg.norm(np.array(end) - np.array(far))
                             c = np.linalg.norm(np.array(start) - np.array(end))
                             angle = np.arccos((a**2 + b**2 - c**2) / (2 * a * b + 1e-5))
-                            if angle <= np.pi / 2 and d > 8000:
+                            if angle <= np.pi / 2 and d > 4000:
                                 finger_count += 1
 
                     self.last_gesture_time = now
@@ -158,7 +165,7 @@ class VisionIntelligence:
                         self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
                         logger.info("✋ [GESTURE DETECTED] Cử chỉ Bàn Tay Xòe (OPEN PALM) -> Lệnh DỪNG XE!")
                         return "dừng"
-                    elif finger_count in (1, 2) or (finger_count == 0 and area > (roi_w * roi_h * 0.05)):
+                    elif finger_count in (1, 2) or (finger_count == 0 and area > (roi_w * roi_h * 0.02)):
                         self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
                         logger.info("✌️ [GESTURE DETECTED] Cử chỉ Giơ Tay Tiến (V-SIGN) -> Lệnh ĐI THẲNG!")
                         return "đi thẳng"
