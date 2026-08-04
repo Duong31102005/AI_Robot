@@ -55,6 +55,8 @@ class PhoWhisperSTT:
     """
 
     def __init__(self, model_size: str = PHOWHISPER_MODEL_NAME, udp_port: int = 5000) -> None:
+        if not model_size:
+            model_size = PHOWHISPER_MODEL_NAME
         self.model_size: str = model_size
         self.sample_rate: int = SAMPLE_RATE
         self.udp_port: int = udp_port
@@ -233,6 +235,11 @@ class PhoWhisperSTT:
         if audio_data is None or len(audio_data) == 0:
             return ""
 
+        # Lọc âm thanh xa/nhỏ dựa trên RMS thô
+        raw_rms = float(np.sqrt(np.mean(audio_data ** 2)))
+        if raw_rms < 0.012:
+            return ""
+
         self.last_audio_len_s = len(audio_data) / self.sample_rate
 
         # 1. DSP Pipeline (DC Offset -> Highpass 80Hz -> Lowpass 7.5kHz -> Notch 50/60Hz -> Soft AGC -> Normalize)
@@ -240,10 +247,9 @@ class PhoWhisperSTT:
         audio_dsp = process_audio_dsp(audio_data, sample_rate=self.sample_rate)
         self.last_dsp_time_ms = (time.perf_counter() - dsp_start) * 1000.0
 
-        # 2. PhoWhisper Large STT Decode (Beam Search=15, Best_Of=15, Temp=0.0)
+        # 2. PhoWhisper Large STT Decode (Beam Search=10, Best_Of=10, Temp=0.0)
         stt_start = time.perf_counter()
         raw_text = ""
-        prompt_text = f"{self.initial_prompt} {self.conversation_context}".strip()
 
         with self.inference_lock:
             try:
@@ -252,17 +258,20 @@ class PhoWhisperSTT:
                     language="vi",
                     beam_size=STT_BEAM_SIZE,
                     best_of=STT_BEST_OF,
-                    temperature=STT_TEMPERATURE,
+                    temperature=0.0,
                     patience=STT_PATIENCE,
                     condition_on_previous_text=False,
-                    initial_prompt=self.initial_prompt,
+                    initial_prompt="",
                     no_repeat_ngram_size=3,
                     repetition_penalty=1.2,
-                    compression_ratio_threshold=2.2,
-                    log_prob_threshold=-0.8,
-                    no_speech_threshold=0.6,
-                    vad_filter=False
+                    compression_ratio_threshold=2.0,
+                    log_prob_threshold=-0.5,
+                    no_speech_threshold=0.35,
+                    vad_filter=True
                 )
+                if hasattr(info, 'no_speech_prob') and info.no_speech_prob > 0.35:
+                    return ""
+
                 text_segments = []
                 confidences = []
                 for s in segments:
@@ -279,6 +288,13 @@ class PhoWhisperSTT:
         # 3. Post-Processing Tiếng Việt (Unicode NFC, lọc rác/từ lặp, chuẩn hóa từ chuyên ngành robot)
         post_start = time.perf_counter()
         clean_text = self._clean_transcript(raw_text)
+        self.last_postprocess_time_ms = (time.perf_counter() - post_start) * 1000.0
+
+        # Lọc nghiêm ngặt: Nếu độ tin cậy < 80% (0.80) thì không thực hiện lệnh (chống đoán từ)
+        from config.settings import STT_MIN_CONFIDENCE
+        if self.last_confidence < STT_MIN_CONFIDENCE:
+            logger.warning(f"[PhoWhisperSTT] ⚠️ Bỏ qua kết quả do độ tin cậy thấp ({self.last_confidence:.2f} < {STT_MIN_CONFIDENCE}): '{clean_text}'")
+            return ""
         self.last_postprocess_time_ms = (time.perf_counter() - post_start) * 1000.0
 
         # Cập nhật ngữ cảnh cho câu sau
@@ -355,14 +371,15 @@ class PhoWhisperSTT:
         text = self.transcribe_audio_buffer(audio_data)
         self.last_total_time_ms = (time.perf_counter() - start_total) * 1000.0
 
-        # Log định dạng chuẩn Production Performance Logging
-        logger.info(
-            f"[PhoWhisperSTT] [PERF] LOAD={self.last_load_time_ms:.1f}ms | WARMUP={self.last_warmup_time_ms:.1f}ms | "
-            f"DSP={self.last_dsp_time_ms:.1f}ms | VAD={self.last_vad_time_ms:.1f}ms | "
-            f"STT={self.last_stt_time_ms:.1f}ms | POSTPROCESS={self.last_postprocess_time_ms:.1f}ms | "
-            f"TOTAL={self.last_total_time_ms:.1f}ms | CPU={self.last_cpu_percent:.1f}% | "
-            f"RAM={self.last_ram_mb:.1f}MB | Text: '{text}'"
-        )
+        # Chỉ in log khi nhận dạng thành công văn bản thực tế (bỏ qua log rác khi Text rỗng)
+        if text and text.strip():
+            logger.info(
+                f"[PhoWhisperSTT] [PERF] LOAD={self.last_load_time_ms:.1f}ms | WARMUP={self.last_warmup_time_ms:.1f}ms | "
+                f"DSP={self.last_dsp_time_ms:.1f}ms | VAD={self.last_vad_time_ms:.1f}ms | "
+                f"STT={self.last_stt_time_ms:.1f}ms | POSTPROCESS={self.last_postprocess_time_ms:.1f}ms | "
+                f"TOTAL={self.last_total_time_ms:.1f}ms | CPU={self.last_cpu_percent:.1f}% | "
+                f"RAM={self.last_ram_mb:.1f}MB | Text: '{text}'"
+            )
         return text, self.last_vad_time_ms, self.last_stt_time_ms
 
     def record_and_transcribe(self, duration: int = RECORD_SECONDS, output_file: str = None) -> str:
@@ -386,37 +403,48 @@ class PhoWhisperSTT:
         # 1. Unicode NFC Normalization
         text = unicodedata.normalize("NFC", text).strip()
 
-        # 2. Lọc câu ảo giác im lặng
+        # 2. Lọc câu ảo giác im lặng & tin tức bịa từ tạp âm (Whisper Hallucinations)
         text_lower = text.lower()
         hallucinations = [
             "cảm ơn các bạn", "hẹn gặp lại", "subscribe", "đăng ký kênh",
             "xem video", "tạm biệt", "chúc các bạn", "kính chào quý vị",
-            "quý vị và các bạn", "video tiếp theo", "theo dõi và hẹn gặp lại"
+            "quý vị và các bạn", "video tiếp theo", "theo dõi và hẹn gặp lại",
+            "cảm động hiếm hoi", "nụ cười ẩm", "liên quan đến tử vong",
+            "israel không", "triều tiên", "siêu mẫu", "doanh nghiệp",
+            "quốc gia việt nam", "không có thông tin gì", "tương liệu",
+            "tội phạm", "nâng niu lương", "trép đám chí", "kẻ mẹo kìa",
+            "buộc tập luyện", "chiếc điện thoại liên tục", "chiến tranh xâm sinh",
+            "mối quan hệ của mình", "tạo nên sự khác biệt", "phát triển theo quy định"
         ]
         for h in hallucinations:
             if h in text_lower:
                 return ""
 
-        # 3. Bỏ từ lặp liên tiếp 3+ lần
+        # 3. Bỏ từ lặp và cụm từ lặp liên tiếp ("kim kim quy" -> "kim quy", "giờ rồi giờ rồi" -> "giờ rồi")
         words = text.split()
         if not words:
             return ""
 
         cleaned_words = []
-        repeat_count = 0
         last_w = None
 
         for w in words:
-            if w.lower() == last_w:
-                repeat_count += 1
-                if repeat_count < 2:
-                    cleaned_words.append(w)
-            else:
+            if w.lower() != last_w:
                 cleaned_words.append(w)
                 last_w = w.lower()
-                repeat_count = 0
 
-        clean_text = " ".join(cleaned_words)
+        # Deduplicate cụm 2 từ lặp lại
+        final_words = []
+        i = 0
+        while i < len(cleaned_words):
+            if i + 3 < len(cleaned_words) and (cleaned_words[i].lower(), cleaned_words[i+1].lower()) == (cleaned_words[i+2].lower(), cleaned_words[i+3].lower()):
+                final_words.extend(cleaned_words[i:i+2])
+                i += 4
+            else:
+                final_words.append(cleaned_words[i])
+                i += 1
+
+        clean_text = " ".join(final_words)
 
         # 4. Chuẩn hóa viết hoa danh từ chuyên ngành robot mà không đổi nghĩa câu
         domain_terms = {

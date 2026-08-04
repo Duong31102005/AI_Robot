@@ -149,3 +149,25 @@ class PiClient:
             return response.status_code == 200
         except Exception as e:
             return False
+
+    def send_partial_stt(self, text: str, timeout: float = 0.3) -> bool:
+        """Gửi phụ đề tạm thời (Partial STT) lên ROS2 topic /speech/partial_text của Pi."""
+        if not text or self.dry_run:
+            return True
+        try:
+            url = self.url.replace("/command", "/speech/partial")
+            response = requests.post(url, json={"text": text}, timeout=timeout)
+            return response.status_code == 200
+        except Exception:
+            return False
+
+    def send_final_stt(self, text: str, timeout: float = 1.0) -> bool:
+        """Gửi phụ đề chính thức (Final STT) lên ROS2 topic /speech/final_text của Pi."""
+        if not text or self.dry_run:
+            return True
+        try:
+            url = self.url.replace("/command", "/speech/final")
+            response = requests.post(url, json={"text": text}, timeout=timeout)
+            return response.status_code == 200
+        except Exception:
+            return False

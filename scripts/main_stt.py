@@ -6,7 +6,8 @@ import threading
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from audio.whisper_stt import WhisperSTT
+from audio.streaming_stt import WhisperStreamingSTT
+from api.stt_websocket import broadcast_stt_event
 from audio.tts_engine import TTSEngine
 from llm.ollama_llm import OllamaLLM
 from communication.pi_client import PiClient
@@ -47,15 +48,21 @@ def parse_wake_word(text: str) -> tuple[bool, str]:
 
 def main():
     logger.info("==============================================")
-    logger.info("    ROBOT KIM QUI (PHOWHISPER / MOONSHINE) - ONLINE   ")
+    logger.info("  ROBOT KIM QUI (STREAMING STT YOUTUBE-LIKE)  ")
     logger.info("==============================================")
 
-    stt = WhisperSTT()
+    stt = WhisperStreamingSTT()
     pi_client = PiClient()
     normalizer = CommandNormalizer()
 
     llm = OllamaLLM() if ENABLE_LLM_CHAT else None
     tts = TTSEngine() if ENABLE_TTS_SPEAKER else None
+
+    # Callback hiển thị chữ tạm thời (Partial Subtitle) kiểu YouTube thời gian thực
+    def handle_partial_subtitle(partial_text: str):
+        print(f"\r💬 [LIVE SUBTITLE] {partial_text}...", end="", flush=True)
+        broadcast_stt_event("partial", partial_text)
+        threading.Thread(target=pi_client.send_partial_stt, args=(partial_text,), daemon=True).start()
 
     # Kiểm tra kết nối Pi
     if not pi_client.test_connection():
@@ -76,12 +83,14 @@ def main():
     logger.info("==========================================================================")
 
     is_robot_moving = False
+    active_until_time = 0.0  # Thời điểm hết hạn phiên hội thoại liên tục (20 giây)
 
     try:
         while True:
-            # Continuous VAD Listening + Moonshine Transcribe
+            # Streaming VAD Listening + Realtime Subtitle
             start_pipeline_t = time.perf_counter()
-            raw_text, vad_ms, stt_ms = stt.listen_and_transcribe()
+            raw_text, vad_ms, stt_ms = stt.listen_and_stream(on_partial=handle_partial_subtitle)
+            print()  # Đổi dòng sau khi chốt câu
 
             if not raw_text:
                 continue
@@ -96,15 +105,24 @@ def main():
                 logger.info("Đã gửi lệnh dừng robot.")
                 break
 
-            # 🔍 ĐIỀU KIỆN KÍCH HOẠT: Kiểm tra từ khóa "Kim Qui"
+            # 🔍 ĐIỀU KIỆN KÍCH HOẠT: Kiểm tra từ khóa "Kim Qui" hoặc phiên hội thoại đang mở (20s)
             has_wake, prompt = parse_wake_word(raw_text)
+            now_t = time.time()
 
             if not has_wake:
-                logger.info(f"[STT] Bỏ qua giọng nói (Robot đang bảo vệ, không gọi 'Kim Qui'): '{raw_text}'")
-                continue
+                if now_t < active_until_time:
+                    # Trong phiên hội thoại 20 giây: Chấp nhận câu nói trực tiếp không cần nhắc lại "Kim Qui"
+                    has_wake = True
+                    prompt = raw_text
+                else:
+                    logger.info(f"[STT] Bỏ qua giọng nói (Robot đang bảo vệ, không gọi 'Kim Qui'): '{raw_text}'")
+                    continue
+
+            # Gia hạn phiên hội thoại 20 giây cho câu nói tiếp theo
+            active_until_time = time.time() + 20.0
 
             # Nếu chỉ gọi "Kim Qui ơi" mà không có câu lệnh
-            if not prompt or prompt in ["ơi", "à", "ơi bạn"]:
+            if not prompt or prompt in ["ơi", "à", "ơi bạn", "kim qui", "kim quy"]:
                 greeting = "Dạ, Kim Qui nghe đây!"
                 total_pipeline_ms = (time.perf_counter() - start_pipeline_t) * 1000.0
                 logger.info(f"[PERF] VAD: {vad_ms:.0f} ms | Moonshine: {stt_ms:.0f} ms | LLM: 0 ms | TTS: 10 ms | TOTAL: {total_pipeline_ms:.0f} ms")

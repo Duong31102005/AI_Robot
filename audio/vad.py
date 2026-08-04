@@ -96,7 +96,8 @@ class VADEngine:
                     }
                 )
                 prob = float(out[0][0])
-                return prob > 0.5
+                # Yêu cầu đồng thời: Xác suất tiếng nói > 0.65 VÀ âm lượng RMS đủ lớn (chỉ bắt người nói gần mic)
+                return prob > 0.65 and rms >= self.effective_threshold
             except Exception:
                 pass
 
