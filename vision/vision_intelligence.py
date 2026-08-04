@@ -116,8 +116,8 @@ class VisionIntelligence:
                 area = cv2.contourArea(max_contour)
                 h, w = frame.shape[:2]
 
-                # Nếu vùng tay lớn chiếm > 12% màn hình trước camera
-                if area > (w * h * 0.12):
+                # Nếu vùng bàn tay chiếm > 4% màn hình trước camera
+                if area > (w * h * 0.04):
                     hull = cv2.convexHull(max_contour, returnPoints=False)
                     defects = cv2.convexDefects(max_contour, hull)
 

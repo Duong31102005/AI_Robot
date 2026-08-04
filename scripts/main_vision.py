@@ -101,25 +101,23 @@ def main():
             if face_greeting:
                 logger.info(f"😊 [FACE GREETING] Chào khách hàng: '{face_greeting}'")
                 threading.Thread(target=pi_client.send_tts, args=(face_greeting,), daemon=True).start()
-            delivery_status = "HOAT_DONG_BINH_THUONG"
+            # 4. Logic Robot Giao Hàng & Cảnh Báo Chướng Ngại Vật (Delivery & Obstacle Avoidance):
+            delivery_status = "DANG_DI_CHUYEN_GIAO_HANG"
             if target is not None:
                 error_x, pos = calculate_person_position(target, w)
                 height_ratio = target["height"] / float(h)
 
-                # Nếu chướng ngại vật / người chiếm > 35% chiều cao khung hình -> CẢNH BÁO TRÁNH VẬT CẢN NGAY!
-                if height_ratio >= 0.35:
+                # Chỉ cảnh báo chướng ngại vật KHI VẬT CẢN Ở SÁT MẶT (< 50cm, height_ratio >= 0.70) VÀ Ở CHÍNH GIỮA LỐI ĐI
+                if height_ratio >= 0.70 and abs(error_x) <= 0.35:
                     delivery_status = "CANH_BAO_VAT_CAN_GAN"
-                else:
-                    delivery_status = "DANG_DI_CHUYEN_GIAO_HANG"
 
-            # 5. Gửi trạng thái Cảnh báo chướng ngại vật ra Loa Robot (Có Cooldown 5s tránh rác HTTP)
+            # 5. Gửi cảnh báo giọng nói ra Loa Robot nếu vật cản ở quá sát mặt (< 50cm) (Cooldown 10s)
             if (curr_time - last_send_time) >= SEND_COMMAND_INTERVAL:
-                if delivery_status == "CANH_BAO_VAT_CAN_GAN" and (curr_time - last_tts_warn_time) > 5.0:
+                if delivery_status == "CANH_BAO_VAT_CAN_GAN" and (curr_time - last_tts_warn_time) > 10.0:
                     last_tts_warn_time = curr_time
-                    logger.warning("[SAFETY ALERT] Cảnh báo chướng ngại vật phía trước! Phát loa xin nhường đường...")
-                    warn_text = "Phía trước có vật cản, xin vui lòng tránh đường cho robot giao hàng, xin cảm ơn!"
+                    logger.warning("[SAFETY ALERT] Cảnh báo chướng ngại vật sát mặt (<50cm)! Phát loa xin nhường đường...")
+                    warn_text = "Phía trước có vật cản quá gần, xin vui lòng tránh đường cho robot giao hàng, xin cảm ơn!"
                     threading.Thread(target=pi_client.send_tts, args=(warn_text,), daemon=True).start()
-                    threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
 
                 last_sent_status = delivery_status
                 last_send_time = curr_time
