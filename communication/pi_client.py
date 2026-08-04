@@ -80,6 +80,13 @@ class PiClient:
         if not text:
             return False
 
+        # Khóa Micro thu âm trong lúc Loa đang phát giọng đọc
+        try:
+            from audio.audio_session import set_tts_speaking_text
+            set_tts_speaking_text(text)
+        except Exception:
+            pass
+
         if self.dry_run:
             logger.info(f"[PI] [DRY_RUN] TTS simulated: '{text}'")
             return True

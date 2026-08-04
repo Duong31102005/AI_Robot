@@ -345,3 +345,40 @@ class OllamaLLM:
         except Exception as e:
             logger.error(f"[LLM] Unexpected error: {e}")
             return "Tôi gặp sự cố khi xử lý câu hỏi."
+
+    def describe_image(self, base64_image: str, prompt: str = "Bạn đang nhìn thấy gì trước mặt?") -> str:
+        """Sử dụng ShopAIKey Cloud Vision API để miêu tả hình ảnh từ Camera Robot."""
+        if not base64_image:
+            return "Dạ, Kim Qui chưa quan sát được hình ảnh từ Camera ạ!"
+
+        headers = {
+            "Authorization": f"Bearer {SHOPAIKEY_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Bạn là Robot Kim Qui (18 tuổi, đẹp trai, sinh viên Đại học Đại Nam). Hãy miêu tả ngắn gọn 1-2 câu tiếng Việt hóm hỉnh về những gì bạn quan sát được trong bức ảnh này theo câu hỏi: '{prompt}'"},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "max_tokens": 100
+        }
+        try:
+            res = requests.post(f"{SHOPAIKEY_BASE_URL}/chat/completions", headers=headers, json=payload, timeout=6.0)
+            if res.status_code == 200:
+                reply = res.json()["choices"][0]["message"]["content"].strip()
+                logger.info(f"[LLM VISION API] Success: '{reply}'")
+                return reply
+        except Exception as e:
+            logger.error(f"[LLM VISION API] Lỗi miêu tả ảnh: {e}")
+        return "Dạ Kim Qui thấy phía trước có một vài đồ vật nhưng chưa nhìn rõ hết ạ!"

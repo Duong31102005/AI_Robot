@@ -44,6 +44,14 @@ class Camera:
 
             self._thread = threading.Thread(target=self._http_update_loop, daemon=True)
             self._thread.start()
+
+            # Lắng nghe tối đa 3 giây chờ khung hình HTTP đầu tiên nạp vào RAM
+            start_wait = time.time()
+            while time.time() - start_wait < 3.0:
+                if self._latest_frame is not None:
+                    break
+                time.sleep(0.05)
+
             return True
         else:
             try:
@@ -73,28 +81,34 @@ class Camera:
                 return False
 
     def _http_update_loop(self):
-        """Luồng ngầm đọc luồng MJPEG HTTP từ Pi 4 mượt mà 0ms và tự động kết nối lại khi rớt mạng."""
+        """Luồng ngầm đọc luồng MJPEG HTTP từ Pi 4 mượt mà 0ms và tự động đọc khung hình."""
         url = str(self.camera_index)
         while self._running:
             stream = None
             try:
-                stream = urllib.request.urlopen(url, timeout=3.0)
+                stream = urllib.request.urlopen(url, timeout=5.0)
                 buffer = b''
                 while self._running:
-                    buffer += stream.read(4096)
-                    a = buffer.find(b'\xff\xd8')
-                    b = buffer.find(b'\xff\xd9', a) if a != -1 else -1
-                    if a != -1 and b != -1 and b > a:
-                        jpg = buffer[a:b+2]
-                        buffer = buffer[b+2:]
+                    chunk = stream.read(4096)
+                    if not chunk:
+                        break
+                    buffer += chunk
+
+                    # Tìm mốc bắt đầu (0xffd8) và kết thúc (0xffd9) của khung hình JPEG
+                    start = buffer.find(b'\xff\xd8')
+                    end = buffer.find(b'\xff\xd9', start + 2) if start != -1 else -1
+
+                    if start != -1 and end != -1:
+                        jpg = buffer[start:end+2]
+                        buffer = buffer[end+2:]
                         frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
                         if frame is not None:
                             with self._lock:
                                 self._latest_frame = frame
                     elif len(buffer) > 500000:
                         buffer = b''
-            except Exception as err:
-                time.sleep(0.5)
+            except Exception:
+                time.sleep(0.3)
             finally:
                 if stream:
                     try:

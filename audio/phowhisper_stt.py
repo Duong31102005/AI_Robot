@@ -201,7 +201,8 @@ class PhoWhisperSTT:
                     if ready[0]:
                         packet, addr = udp_sock.recvfrom(8192)
                         if len(packet) > 0:
-                            audio_block = np.frombuffer(packet, dtype=np.float32)
+                            int16_data = np.frombuffer(packet, dtype=np.int16)
+                            audio_block = int16_data.astype(np.float32) / 32768.0
                             active_source = "udp"
                             if not hasattr(self, '_logged_udp_active'):
                                 logger.info(f"🔊 [MICRO CAMERA UGREEN] 🟢 Đã nhận luồng âm thanh UDP từ Pi ({addr[0]}:5000)!")
@@ -337,6 +338,18 @@ class PhoWhisperSTT:
                 chunk = self.audio_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
+
+            # 🔇 BỎ QUA TOÀN BỘ ÂM THANH KHI LOA DANG PHÁT GIỌNG ĐỌC (TTS MUTE GUARD)
+            try:
+                from audio.audio_session import is_tts_speaking
+                if is_tts_speaking():
+                    pre_roll_buffer.clear()
+                    speech_chunks.clear()
+                    self.clear_audio_queue()
+                    state = "LISTENING"
+                    continue
+            except Exception:
+                pass
 
             is_speech = self.vad_engine.is_speech_chunk(chunk)
 

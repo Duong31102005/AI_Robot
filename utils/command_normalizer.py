@@ -20,8 +20,12 @@ class CommandNormalizer:
     COMMAND_BACKWARD = "đi lùi"
     COMMAND_LEFT = "rẽ trái"
     COMMAND_RIGHT = "rẽ phải"
+    COMMAND_ROTATE_LEFT = "xoay trái"
+    COMMAND_ROTATE_RIGHT = "xoay phải"
     COMMAND_CHEO_TRAI = "chéo trái"
     COMMAND_CHEO_PHAI = "chéo phải"
+    COMMAND_LUI_CHEO_TRAI = "lùi chéo trái"
+    COMMAND_LUI_CHEO_PHAI = "lùi chéo phải"
     COMMAND_XOAY_TRON = "xoay tròn"
     COMMAND_STOP = "dừng"
 
@@ -58,14 +62,24 @@ class CommandNormalizer:
         if self._check_stop(cleaned, ascii_str):
             return self.COMMAND_STOP
 
-        # 1.5 KIỂM TRA ĐI CHÉO TRÁI / CHÉO PHẢI
-        if "cheo trai" in ascii_str or "cheo trai" in cleaned or "tien trai" in ascii_str:
+        # 2. KIỂM TRA LÙI CHÉO TRÁI / LÙI CHÉO PHẢI
+        if "lui cheo trai" in ascii_str or "lui trai" in ascii_str:
+            return self.COMMAND_LUI_CHEO_TRAI
+        if "lui cheo phai" in ascii_str or "lui phai" in ascii_str:
+            return self.COMMAND_LUI_CHEO_PHAI
+
+        # 3. KIỂM TRA ĐI CHÉO TRÁI / CHÉO PHẢI
+        if "cheo trai" in ascii_str or "tien trai" in ascii_str:
             return self.COMMAND_CHEO_TRAI
-        if "cheo phai" in ascii_str or "cheo phai" in cleaned or "tien phai" in ascii_str:
+        if "cheo phai" in ascii_str or "tien phai" in ascii_str:
             return self.COMMAND_CHEO_PHAI
 
-        # 1.6 KIỂM TRA XOAY VÒNG TRÒN / XOAY 360 ĐỘ
-        if any(x in ascii_str for x in ["xoay tron", "vong tron", "quay 360", "xoay 360", "quay tron", "xoay qua", "xoay vong"]):
+        # 4. KIỂM TRA XOAY TRÁI / XOAY PHẢI / XOAY TRÒN 360
+        if "xoay trai" in ascii_str or "quay trai" in ascii_str:
+            return self.COMMAND_ROTATE_LEFT
+        if "xoay phai" in ascii_str or "quay phai" in ascii_str:
+            return self.COMMAND_ROTATE_RIGHT
+        if any(x in ascii_str for x in ["xoay tron", "vong tron", "quay 360", "xoay 360", "quay tron"]):
             return self.COMMAND_XOAY_TRON
 
         # 2. LỌC CÁC CÂU QUAN SÁT / GIAO TIẾP KHÔNG PHẢI LỆNH

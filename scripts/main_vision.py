@@ -51,8 +51,8 @@ def main():
         while True:
             ret, frame = camera.read_frame()
             if not ret or frame is None:
-                logger.error("[VISION] Đọc khung hình từ Camera thất bại.")
-                break
+                time.sleep(0.02)
+                continue
 
             h, w = frame.shape[:2]
             frame_count += 1
@@ -64,7 +64,7 @@ def main():
                 fps = 1.0 / time_diff
             prev_time = curr_time
 
-            # 3. Chạy AI YOLO11s nhận diện đối tượng & chướng ngại vật (Chạy mỗi 2 frame để mượt 30+ FPS)
+            # 3. Chạy AI YOLO11s nhận diện đối tượng & chướng ngại vật (Chạy mỗi 2 frame để mượt 40+ FPS)
             if frame_count % 2 == 0 or not cached_detections:
                 cached_detections = detector.detect(frame)
                 cached_target = select_target(cached_detections)
@@ -72,38 +72,53 @@ def main():
             detections = cached_detections
             target = cached_target
 
-            # Gửi danh sách vật thể YOLO nhận dạng được lên ROS2/Pi qua cổng 8001
-            if detections and (curr_time - last_send_time) >= SEND_COMMAND_INTERVAL:
+            # Gửi danh sách vật thể YOLO nhận dạng được lên Web/Pi (Mỗi 1.5s để tránh nghẽn mạng)
+            if detections and (curr_time - last_send_time) >= 1.5:
+                last_send_time = curr_time
                 threading.Thread(target=pi_client.send_detections, args=(detections,), daemon=True).start()
 
-            # 4. Logic Robot Giao Hàng (Delivery Status):
-            # SLAM/LiDAR nắm quyền điều khiển bánh xe chính. Camera kiểm tra chướng ngại vật & điểm giao hàng.
+            # 3.5 TÍCH HỢP VISION INTELLIGENCE (QR CODE SCANNER & HAND GESTURE CONTROL)
+            from vision.vision_intelligence import vision_intelligence
+            vision_intelligence.current_frame = frame
+
+            # a. Quét mã QR Code Giao Hàng
+            scanned_qr = vision_intelligence.scan_qr_code(frame)
+            if scanned_qr:
+                qr_text = f"Xác nhận thành công mã Q R giao hàng {scanned_qr}! Mời bạn nhận hàng ạ!"
+                logger.info(f"📦 [DELIVERY QR SUCCESS] Quét thành công: '{scanned_qr}'")
+                threading.Thread(target=pi_client.send_tts, args=(qr_text,), daemon=True).start()
+
+            # b. Nhận diện cử chỉ tay (✋ Stop / ✌️ Go)
+            gesture_cmd = vision_intelligence.detect_hand_gesture(frame)
+            if gesture_cmd:
+                g_text = f"Kim Qui đã nhận cử chỉ tay {gesture_cmd}"
+                logger.info(f"✋ [GESTURE CONTROL] Thực thi cử chỉ: '{gesture_cmd}'")
+                threading.Thread(target=pi_client.send_command, args=(gesture_cmd,), daemon=True).start()
+                threading.Thread(target=pi_client.send_tts, args=(g_text,), daemon=True).start()
+
+            # c. Nhận diện khuôn mặt & Chào hỏi tự động
+            face_greeting = vision_intelligence.detect_face_and_greet(frame)
+            if face_greeting:
+                logger.info(f"😊 [FACE GREETING] Chào khách hàng: '{face_greeting}'")
+                threading.Thread(target=pi_client.send_tts, args=(face_greeting,), daemon=True).start()
             delivery_status = "HOAT_DONG_BINH_THUONG"
             if target is not None:
                 error_x, pos = calculate_person_position(target, w)
                 height_ratio = target["height"] / float(h)
 
-                if height_ratio > 0.85:
+                # Nếu chướng ngại vật / người chiếm > 35% chiều cao khung hình -> CẢNH BÁO TRÁNH VẬT CẢN NGAY!
+                if height_ratio >= 0.35:
                     delivery_status = "CANH_BAO_VAT_CAN_GAN"
-                elif target.get("class_name") == "person" and 0.35 <= height_ratio <= 0.85 and pos == "CENTER":
-                    delivery_status = "DA_DEN_DIEM_GIAO_HANG"
                 else:
                     delivery_status = "DANG_DI_CHUYEN_GIAO_HANG"
 
-            # 5. Gửi trạng thái AI Giao hàng & Cảnh báo giọng nói ra Loa Robot nếu quá gần hoặc đến điểm giao (Có Cooldown 5s tránh rác HTTP)
+            # 5. Gửi trạng thái Cảnh báo chướng ngại vật ra Loa Robot (Có Cooldown 5s tránh rác HTTP)
             if (curr_time - last_send_time) >= SEND_COMMAND_INTERVAL:
                 if delivery_status == "CANH_BAO_VAT_CAN_GAN" and (curr_time - last_tts_warn_time) > 5.0:
                     last_tts_warn_time = curr_time
-                    logger.warning("[SAFETY ALERT] Cảnh báo chướng ngại vật quá gần! Phát loa xin nhường đường...")
-                    warn_text = "Xin lỗi, vui lòng nhường đường cho robot giao hàng, xin cảm ơn!"
+                    logger.warning("[SAFETY ALERT] Cảnh báo chướng ngại vật phía trước! Phát loa xin nhường đường...")
+                    warn_text = "Phía trước có vật cản, xin vui lòng tránh đường cho robot giao hàng, xin cảm ơn!"
                     threading.Thread(target=pi_client.send_tts, args=(warn_text,), daemon=True).start()
-                    threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
-
-                elif delivery_status == "DA_DEN_DIEM_GIAO_HANG" and (curr_time - last_tts_warn_time) > 5.0:
-                    last_tts_warn_time = curr_time
-                    logger.info("[DELIVERY SUCCESS] Đã đến điểm giao hàng! Phát loa thông báo...")
-                    arrived_text = "Dạ, Kim Qui đã mang đồ đến điểm giao hàng, xin vui lòng nhận hàng!"
-                    threading.Thread(target=pi_client.send_tts, args=(arrived_text,), daemon=True).start()
                     threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
 
                 last_sent_status = delivery_status
@@ -111,6 +126,12 @@ def main():
 
             # 6. Vẽ giao diện Debug trên màn hình (Hiển thị nhãn Giao Hàng & Bounding Box)
             debug_frame = draw_debug_overlay(frame, detections, target=target, fps=fps, show_debug=VISION_DEBUG)
+            debug_frame = vision_intelligence.draw_intelligence_hud(debug_frame)
+
+            # Thêm nhãn QR Code nếu vừa quét
+            if vision_intelligence.last_scanned_qr:
+                cv2.putText(debug_frame, f"QR VALIDATED: {vision_intelligence.last_scanned_qr}", (15, 60),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
             # Bổ sung thông tin Robot Delivery Status & Pi Connection Status
             status_color = (0, 255, 0) if pi_client.is_connected() else (0, 0, 255)

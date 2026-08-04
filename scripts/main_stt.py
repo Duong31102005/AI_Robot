@@ -111,27 +111,25 @@ def main():
                 logger.info("Đã gửi lệnh dừng robot.")
                 break
 
-            # 🔍 ĐIỀU KIỆN KÍCH HOẠT: Kiểm tra từ khóa "Kim Qui" hoặc phiên hội thoại đang mở (20s)
+            # 🔍 ĐIỀU KIỆN KÍCH HOẠT THEO KIẾN TRÚC ROBOT XIAOZHI (小智 AI)
+            from audio.audio_session import session_manager
             has_wake, prompt = parse_wake_word(raw_text)
-            now_t = time.time()
 
-            if not has_wake:
-                if now_t < active_until_time:
-                    # Trong phiên hội thoại 20 giây: Chấp nhận câu nói trực tiếp không cần nhắc lại "Kim Qui"
-                    has_wake = True
-                    prompt = raw_text
-                else:
-                    logger.info(f"[STT] Bỏ qua giọng nói (Robot đang bảo vệ, không gọi 'Kim Qui'): '{raw_text}'")
-                    continue
+            if has_wake:
+                session_manager.trigger_wake_word()
+            elif session_manager.is_active():
+                # Trong phiên hội thoại 12 giây XiaoZhi: Chấp nhận câu nói trực tiếp không cần gọi lại "Kim Qui"
+                prompt = raw_text
+            else:
+                logger.info(f"[STT] Bỏ qua giọng nói (Robot IDLE - chờ gọi 'Kim Qui'): '{raw_text}'")
+                continue
 
-            # Gia hạn phiên hội thoại 20 giây cho câu nói tiếp theo
-            active_until_time = time.time() + 20.0
-
-            # Nếu chỉ gọi "Kim Qui ơi" mà không có câu lệnh
-            if not prompt or prompt in ["ơi", "à", "ơi bạn", "kim qui", "kim quy"]:
+            # Lọc bỏ câu rác, câu rỗng hoặc ký tự đặc biệt vô nghĩa
+            prompt_clean = prompt.strip().strip(".!?,")
+            if not prompt_clean or len(prompt_clean) < 2 or prompt_clean in ["à", "ừ", "ơ", "thì", "nhé", "nha"]:
                 greeting = "Dạ, Kim Qui nghe đây!"
                 total_pipeline_ms = (time.perf_counter() - start_pipeline_t) * 1000.0
-                logger.info(f"[PERF] VAD: {vad_ms:.0f} ms | Moonshine: {stt_ms:.0f} ms | LLM: 0 ms | TTS: 10 ms | TOTAL: {total_pipeline_ms:.0f} ms")
+                logger.info(f"[PERF] VAD: {vad_ms:.0f} ms | STT: {stt_ms:.0f} ms | LLM: 0 ms | TOTAL: {total_pipeline_ms:.0f} ms")
                 logger.info(f"[STT] WAKE WORD DETECTED -> Respondent: '{greeting}'")
                 if tts:
                     tts.speak(greeting, sync=False)
@@ -139,25 +137,28 @@ def main():
                 threading.Thread(target=pi_client.send_conversation, args=("Kim Qui ơi", greeting), daemon=True).start()
                 continue
 
-            # 1. Kiểm tra Lệnh di chuyển Robot (Chỉ kích hoạt khi gọi Kim Qui)
-            command = normalizer.normalize(prompt)
+            # Gia hạn phiên hội thoại 12 giây XiaoZhi cho câu hỏi tiếp theo
+            session_manager.refresh_session()
+
+            # 1. Kiểm tra Lệnh di chuyển Robot (Ưu tiên xử lý lệnh di chuyển)
+            command = normalizer.normalize(prompt_clean)
 
             if command:
                 if command == "dừng":
                     is_robot_moving = False
                     total_pipeline_ms = (time.perf_counter() - start_pipeline_t) * 1000.0
-                    logger.info(f"[PERF] VAD: {vad_ms:.0f} ms | Moonshine: {stt_ms:.0f} ms | LLM: 0 ms | TTS: 10 ms | TOTAL: {total_pipeline_ms:.0f} ms")
+                    logger.info(f"[PERF] VAD: {vad_ms:.0f} ms | STT: {stt_ms:.0f} ms | LLM: 0 ms | TOTAL: {total_pipeline_ms:.0f} ms")
                     logger.info("[STT] WAKE COMMAND: Dừng Robot!")
                     pi_client.send_command("dừng")
                     response_str = "Kim Qui đã dừng lại"
                     if tts:
                         tts.speak(response_str, sync=False)
                     threading.Thread(target=pi_client.send_tts, args=(response_str,), daemon=True).start()
-                    threading.Thread(target=pi_client.send_conversation, args=(prompt, response_str), daemon=True).start()
+                    threading.Thread(target=pi_client.send_conversation, args=(prompt_clean, response_str), daemon=True).start()
                 else:
                     is_robot_moving = True
                     total_pipeline_ms = (time.perf_counter() - start_pipeline_t) * 1000.0
-                    logger.info(f"[PERF] VAD: {vad_ms:.0f} ms | Moonshine: {stt_ms:.0f} ms | LLM: 0 ms | TTS: 10 ms | TOTAL: {total_pipeline_ms:.0f} ms")
+                    logger.info(f"[PERF] VAD: {vad_ms:.0f} ms | STT: {stt_ms:.0f} ms | LLM: 0 ms | TOTAL: {total_pipeline_ms:.0f} ms")
                     logger.info(f"[STT] WAKE COMMAND: '{raw_text}' -> '{command}' (Robot bắt đầu di chuyển)")
                     success = pi_client.send_command(command)
                     response_str = f"Kim Qui đã nhận lệnh {command}"
@@ -165,21 +166,36 @@ def main():
                         tts.speak(response_str, sync=False)
                     if success:
                         threading.Thread(target=pi_client.send_tts, args=(response_str,), daemon=True).start()
-                        threading.Thread(target=pi_client.send_conversation, args=(prompt, response_str), daemon=True).start()
+                        threading.Thread(target=pi_client.send_conversation, args=(prompt_clean, response_str), daemon=True).start()
                     elif not success:
                         logger.warning("Gửi lệnh thất bại.")
             else:
                 # 2. Xử lý Trò chuyện / Hỏi đáp LLM trong luồng ngầm không làm đơ hệ thống
-                logger.info(f"[STT] WAKE CHAT QUESTION: '{prompt}'")
+                logger.info(f"[STT] XIAOZHI SESSION CHAT: '{prompt_clean}'")
                 def _async_chat_process(q_prompt, pipeline_t, v_ms, s_ms):
                     if llm and llm.is_available():
                         # 🧠 STATE: THINKING_LLM
+                        from vision.vision_intelligence import vision_intelligence
+                        vision_intelligence.current_expression = "(🧠_🧠) THINKING"
+                        vision_intelligence.expression_color = (255, 255, 0)
                         logger.info(f"🧠 [ROBOT STATE: THINKING_LLM] Đang suy luận câu hỏi: '{q_prompt}'...")
                         llm_start_t = time.perf_counter()
-                        reply = llm.generate_response(q_prompt)
+
+                        # 👁️ HỎI ĐÁP THỊ GIÁC AI (VISION VLM) KHI HỎI "KIM QUI NHÌN THẤY GÌ"
+                        if any(kw in q_prompt.lower() for kw in ["nhìn thấy gì", "thấy gì", "phía trước có gì", "trước mặt có gì"]):
+                            b64_img = vision_intelligence.encode_frame_to_base64(getattr(vision_intelligence, 'current_frame', None))
+                            if b64_img and hasattr(llm, 'describe_image'):
+                                reply = llm.describe_image(b64_img, q_prompt)
+                            else:
+                                reply = llm.generate_response(q_prompt)
+                        else:
+                            reply = llm.generate_response(q_prompt)
+
                         llm_ms = (time.perf_counter() - llm_start_t) * 1000.0
                         if reply:
                             # 🔊 STATE: SPEAKING_TTS
+                            vision_intelligence.current_expression = "(🔊_🔊) SPEAKING"
+                            vision_intelligence.expression_color = (0, 255, 255)
                             total_pipeline_ms = (time.perf_counter() - pipeline_t) * 1000.0
                             logger.info(f"🔊 [ROBOT STATE: SPEAKING_TTS] AI Trả lời ({llm_ms:.0f}ms): '{reply}'")
                             logger.info(f"[PERF SUMMARY] VAD: {v_ms:.0f} ms | STT: {s_ms:.0f} ms | LLM: {llm_ms:.0f} ms | TOTAL: {total_pipeline_ms:.0f} ms")
@@ -187,10 +203,15 @@ def main():
                                 tts.speak(reply, sync=False)
                             pi_client.send_tts(reply)
                             pi_client.send_conversation(q_prompt, reply)
+
+                            # 🟢 GIA HẠN THÊM PHIÊN 12S XIAOZHI TÍNH TỪ THỜI ĐIỂM LOA ĐỌC XONG
+                            session_manager.trigger_wake_word()
+                            vision_intelligence.current_expression = "(🎧_🎧) LISTENING"
+                            vision_intelligence.expression_color = (0, 255, 0)
                     else:
                         logger.warning(f"Bỏ qua câu trò chuyện (LLM không khả dụng): '{q_prompt}'")
 
-                threading.Thread(target=_async_chat_process, args=(prompt, start_pipeline_t, vad_ms, stt_ms), daemon=True).start()
+                threading.Thread(target=_async_chat_process, args=(prompt_clean, start_pipeline_t, vad_ms, stt_ms), daemon=True).start()
 
     except KeyboardInterrupt:
         logger.info("CTRL+C - dừng robot.")
