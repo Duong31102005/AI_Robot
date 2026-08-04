@@ -290,10 +290,15 @@ class PhoWhisperSTT:
         clean_text = self._clean_transcript(raw_text)
         self.last_postprocess_time_ms = (time.perf_counter() - post_start) * 1000.0
 
-        # Lọc nghiêm ngặt: Nếu độ tin cậy < 80% (0.80) thì không thực hiện lệnh (chống đoán từ)
-        from config.settings import STT_MIN_CONFIDENCE
-        if self.last_confidence < STT_MIN_CONFIDENCE:
-            logger.warning(f"[PhoWhisperSTT] ⚠️ Bỏ qua kết quả do độ tin cậy thấp ({self.last_confidence:.2f} < {STT_MIN_CONFIDENCE}): '{clean_text}'")
+        # Ngưỡng tin cậy linh hoạt (Adaptive Confidence Threshold):
+        # - Cho phép từ khóa gọi robot "Kim Qui", "Rùa", "Galacticos" vượt qua khi confidence >= 0.45 (vì từ ngắn Whisper thường tính score ~0.50-0.60).
+        # - Các câu nói thường hoặc nhiễu âm thanh cần confidence >= 0.68 để tránh ảo giác.
+        wake_terms = ["kim qui", "rùa", "galacticos", "đại nam", "phương nam", "hoàng dương", "duy a", "duy văn", "thầy thơ"]
+        has_wake_term = any(w in clean_text.lower() for w in wake_terms)
+        min_conf = 0.45 if has_wake_term else 0.68
+
+        if self.last_confidence < min_conf:
+            logger.warning(f"[PhoWhisperSTT] ⚠️ Bỏ qua kết quả do độ tin cậy thấp ({self.last_confidence:.2f} < {min_conf:.2f}): '{clean_text}'")
             return ""
         self.last_postprocess_time_ms = (time.perf_counter() - post_start) * 1000.0
 

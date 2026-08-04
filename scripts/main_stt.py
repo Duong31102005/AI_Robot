@@ -87,6 +87,9 @@ def main():
 
     try:
         while True:
+            # 🎧 STATE: LISTENING
+            logger.info("🎧 [ROBOT STATE: LISTENING] Robot đang lắng nghe âm thanh từ Micro UGREEN...")
+            
             # Streaming VAD Listening + Realtime Subtitle
             start_pipeline_t = time.perf_counter()
             raw_text, vad_ms, stt_ms = stt.listen_and_stream(on_partial=handle_partial_subtitle)
@@ -94,6 +97,9 @@ def main():
 
             if not raw_text:
                 continue
+
+            # ⚡ STATE: PROCESSING_STT
+            logger.info(f"⚡ [ROBOT STATE: PROCESSING_STT] Đã dịch giọng nói: '{raw_text}'")
 
             raw_text = raw_text.strip()
             raw_lower = raw_text.lower()
@@ -167,13 +173,16 @@ def main():
                 logger.info(f"[STT] WAKE CHAT QUESTION: '{prompt}'")
                 def _async_chat_process(q_prompt, pipeline_t, v_ms, s_ms):
                     if llm and llm.is_available():
+                        # 🧠 STATE: THINKING_LLM
+                        logger.info(f"🧠 [ROBOT STATE: THINKING_LLM] Đang suy luận câu hỏi: '{q_prompt}'...")
                         llm_start_t = time.perf_counter()
                         reply = llm.generate_response(q_prompt)
                         llm_ms = (time.perf_counter() - llm_start_t) * 1000.0
                         if reply:
+                            # 🔊 STATE: SPEAKING_TTS
                             total_pipeline_ms = (time.perf_counter() - pipeline_t) * 1000.0
-                            logger.info(f"[PERF] VAD: {v_ms:.0f} ms | STT: {s_ms:.0f} ms | LLM: {llm_ms:.0f} ms | TOTAL: {total_pipeline_ms:.0f} ms")
-                            logger.info(f"🗣️ AI TRẢ LỜI: '{reply}'")
+                            logger.info(f"🔊 [ROBOT STATE: SPEAKING_TTS] AI Trả lời ({llm_ms:.0f}ms): '{reply}'")
+                            logger.info(f"[PERF SUMMARY] VAD: {v_ms:.0f} ms | STT: {s_ms:.0f} ms | LLM: {llm_ms:.0f} ms | TOTAL: {total_pipeline_ms:.0f} ms")
                             if tts:
                                 tts.speak(reply, sync=False)
                             pi_client.send_tts(reply)
