@@ -141,30 +141,35 @@ class VisionIntelligence:
                         )
 
                         lm = hand_landmarks.landmark
-                        # Trạng thái duỗi ngón tay (So sánh độ cao Y đỉnh ngón so với khớp PIP)
-                        index_up = lm[8].y < lm[6].y
-                        middle_up = lm[12].y < lm[10].y
-                        ring_up = lm[16].y < lm[14].y
-                        pinky_up = lm[20].y < lm[18].y
-                        thumb_up = lm[4].y < lm[3].y or (abs(lm[4].x - lm[2].x) > 0.05)
+                        # Trạng thái duỗi ngón tay chuẩn xác 360 độ (Khoảng cách từ Cổ tay lm[0] tới Đỉnh ngón vs Khớp PIP)
+                        wrist_x, wrist_y = lm[0].x, lm[0].y
+                        def is_ext(tip_i, pip_i):
+                            d_tip = np.hypot(lm[tip_i].x - wrist_x, lm[tip_i].y - wrist_y)
+                            d_pip = np.hypot(lm[pip_i].x - wrist_x, lm[pip_i].y - wrist_y)
+                            return d_tip > (d_pip * 1.12)
+
+                        index_up = is_ext(8, 6)
+                        middle_up = is_ext(12, 10)
+                        ring_up = is_ext(16, 14)
+                        pinky_up = is_ext(20, 18)
 
                         self.last_gesture_time = now
                         self.gesture_display_until = now + 3.0
 
-                        # a. Cử chỉ ✌️ V-Sign (2 ngón tay Trỏ + Giữa duỗi lên, 2 ngón khác gập xuống)
+                        # a. Cử chỉ ✌️ V-Sign / 2 Ngón tay duỗi (bất kể xoay dọc hay xoay ngang)
                         if index_up and middle_up and (not ring_up) and (not pinky_up):
                             self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
-                            logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ 2 Ngón Tay (V-SIGN) -> Lệnh ĐI THẲNG!")
+                            logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ 2 Ngón Tay (V-SIGN 360°) -> Lệnh ĐI THẲNG!")
                             return "đi thẳng"
 
-                        # b. Cử chỉ ✋ Bàn tay xòe (Cả 4-5 ngón tay đều duỗi mở rộng)
+                        # b. Cử chỉ ✋ Bàn tay xòe (Cả 4 ngón tay duỗi)
                         elif index_up and middle_up and ring_up and pinky_up:
                             self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
-                            logger.info("✋ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Bàn Tay Xòe (OPEN PALM) -> Lệnh DỪNG XE!")
+                            logger.info("✋ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Bàn Tay Xòe (OPEN PALM 360°) -> Lệnh DỪNG XE!")
                             return "dừng"
 
-                        # c. Trường hợp giơ 1 hoặc 2 ngón bất kỳ hướng lên
-                        elif index_up and (not ring_up) and (not pinky_up):
+                        # c. Trường hợp giơ ngón trỏ hoặc ngón giữa
+                        elif (index_up or middle_up) and (not ring_up) and (not pinky_up):
                             self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
                             logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Giơ Ngón Tay -> Lệnh ĐI THẲNG!")
                             return "đi thẳng"
