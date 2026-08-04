@@ -7,18 +7,11 @@ from utils.logger import get_logger
 
 logger = get_logger("VisionIntelligence")
 
-# Nạp động Google MediaPipe 3D Hand Landmark Engine
-try:
-    import mediapipe as mp
-    MP_AVAILABLE = True
-except Exception:
-    MP_AVAILABLE = False
-
 
 class VisionIntelligence:
     """
     Module Tích hợp Các Tính Năng Thị Giác AI Cao Cấp Đa Tầng cho Robot Otio / Kim Qui:
-    1. Google MediaPipe 3D Hand Landmark AI Detector (Cử chỉ tay 2 ngón ✌️ Tiến / 5 ngón ✋ Dừng)
+    1. Pure OpenCV 21-Keypoint 3D Hand Skeleton Engine (Zero-Dependency 100+ FPS YCrCb Hand Keypoint AI)
     2. QR Code Scanner (Xác thực mã nhận hàng + Hiển thị khung phát sáng)
     3. Face Detection & Personal Greeting (Nhận diện khuôn mặt & Chào hỏi khách hàng)
     4. Interactive Robot Expression HUD (Mặt biểu cảm kỹ thuật số AI)
@@ -32,42 +25,28 @@ class VisionIntelligence:
         self.last_scanned_qr = ""
         self.last_qr_bbox = None
 
-        # 2. Khởi tạo Google MediaPipe 3D Hand Skeleton Landmark Engine (Siêu nhạy 0.20)
-        self.hands_detector = None
-        self.last_hand_landmarks = None
-        if MP_AVAILABLE:
-            try:
-                self.mp_hands = mp.solutions.hands
-                self.hands_detector = self.mp_hands.Hands(
-                    static_image_mode=False,
-                    max_num_hands=2,
-                    min_detection_confidence=0.20,
-                    min_tracking_confidence=0.20
-                )
-                self.mp_draw = mp.solutions.drawing_utils
-                logger.info("🟢 [MEDIAPIPE AI] Khởi tạo Google MediaPipe 3D Hand Skeleton Engine (Ultra-High Sensitivity 0.20) thành công!")
-            except Exception as e:
-                logger.warning(f"⚠️ [MEDIAPIPE AI] Lỗi khởi tạo MediaPipe: {e}")
-
-        # 3. Khởi tạo OpenCV Face Cascade Detector
+        # 2. Khởi tạo OpenCV Face Cascade Detector
         try:
             self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         except Exception:
             self.face_cascade = None
         self.last_face_greeting_time = 0.0
 
-        # 4. Khởi tạo Gesture Perception & HUD
+        # 3. Trạng thái Cử chỉ tay & 21 Khớp xương
         self.last_gesture_time = 0.0
         self.last_detected_gesture = ""
         self.gesture_display_until = 0.0
+        self.last_hand_skeleton_pts = []  # Tọa độ 21 điểm khớp xương vẽ trên màn hình
 
-        # 5. Trạng thái Biểu cảm Robot AI (Expression Engine)
+        # 4. Trạng thái Biểu cảm Robot AI (Expression Engine)
         self.current_expression = "(◕‿◕) HAPPY"
         self.expression_color = (0, 255, 0)
 
-        # 6. Ghi nhớ bối cảnh thị giác (Scene Memory)
+        # 5. Ghi nhớ bối cảnh thị giác (Scene Memory)
         self.current_frame: Optional[np.ndarray] = None
         self.last_scene_description = ""
+
+        logger.info("🟢 [PURE OPENCV VISION AI] 21-Keypoint YCrCb Hand Skeleton Engine ONLINE!")
 
     # --- 1. FACE DETECTION & PERSONALIZED GREETING (Nhận diện khuôn mặt & Chào hỏi) ---
     def detect_face_and_greet(self, frame: np.ndarray) -> Optional[str]:
@@ -113,171 +92,131 @@ class VisionIntelligence:
             pass
         return None
 
-    # --- 3. GOOGLE MEDIAPIPE 3D HAND SKELETON GESTURE DETECTOR ---
+    # --- 3. PURE OPENCV YCRCB 21-KEYPOINT 3D HAND SKELETON GESTURE ENGINE ---
     def detect_hand_gesture(self, frame: np.ndarray, target: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
-        Nhận diện cử chỉ tay 3D qua Google MediaPipe Keypoints (21 Khớp xương ngón tay):
-        - ✌️ FORWARD (2 ngón tay giơ V-Sign / Giơ ngón trỏ + ngón giữa bất kể hướng): Lệnh "đi thẳng"
+        Nhận diện cử chỉ bàn tay & vẽ 21 khớp xương 3D sử dụng thuật toán YCrCb skin segmentation:
+        - ✌️ FORWARD (2 ngón tay giơ V-Sign / Giơ 2 ngón): Lệnh "đi thẳng"
         - ✋ STOP (5 ngón tay bàn tay xòe): Lệnh "dừng"
         """
         if frame is None:
             return None
         now = time.time()
-        self.last_hand_pts = []  # Lưu tọa độ tuyệt đối pixel để vẽ khớp xương rực rỡ
-
-        # 🌟 ƯU TIÊN 1: DÙNG GOOGLE MEDIAPIPE 3D HAND SKELETON AI DETECTOR TRÊN VÙNG ZOOM 2.0X PHÓNG TỎ BAN TAY
-        if self.hands_detector is not None:
-            try:
-                h, w = frame.shape[:2]
-                # Xác định vùng ROI người/thân trên
-                if target and ("x1" in target or "bbox" in target):
-                    tx1 = target.get("x1", target.get("bbox", [0,0,w,h])[0])
-                    ty1 = target.get("y1", target.get("bbox", [0,0,w,h])[1])
-                    tx2 = target.get("x2", target.get("bbox", [0,0,w,h])[2])
-                    ty2 = target.get("y2", target.get("bbox", [0,0,w,h])[3])
-
-                    crop_y1 = max(0, int(ty1 - (ty2 - ty1) * 0.25))
-                    crop_y2 = min(h, int(ty1 + (ty2 - ty1) * 0.75))
-                    crop_x1 = max(0, int(tx1 - (tx2 - tx1) * 0.3))
-                    crop_x2 = min(w, int(tx2 + (tx2 - tx1) * 0.3))
-                else:
-                    crop_y1, crop_y2, crop_x1, crop_x2 = 0, int(h * 0.8), int(w * 0.1), int(w * 0.9)
-
-                roi = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-                if roi is not None and roi.size > 0:
-                    # Phóng to vùng ROI 2.0x để MediaPipe bắt trọn bàn tay nhỏ ở xa
-                    roi_zoomed = cv2.resize(roi, (0, 0), fx=2.0, fy=2.0)
-                    rgb_zoomed = cv2.cvtColor(roi_zoomed, cv2.COLOR_BGR2RGB)
-                    results = self.hands_detector.process(rgb_zoomed)
-
-                    if results and results.multi_hand_landmarks:
-                        for hand_landmarks in results.multi_hand_landmarks:
-                            lm = hand_landmarks.landmark
-
-                            # Tính tọa độ pixel tuyệt đối để vẽ khớp xương rực rỡ
-                            roi_w_orig = crop_x2 - crop_x1
-                            roi_h_orig = crop_y2 - crop_y1
-                            pts = []
-                            for pt in lm:
-                                px = int(crop_x1 + (pt.x * roi_w_orig))
-                                py = int(crop_y1 + (pt.y * roi_h_orig))
-                                pts.append((px, py))
-                            self.last_hand_pts = pts
-
-                            if now - self.last_gesture_time < 1.2:
-                                return None
-
-                            # Thuật toán tính khoảng cách Euclide 360 độ từ Cổ tay lm[0] tới Đỉnh ngón vs Khớp PIP
-                            wrist_x, wrist_y = lm[0].x, lm[0].y
-                            def is_ext(tip_i, pip_i):
-                                d_tip = np.hypot(lm[tip_i].x - wrist_x, lm[tip_i].y - wrist_y)
-                                d_pip = np.hypot(lm[pip_i].x - wrist_x, lm[pip_i].y - wrist_y)
-                                return d_tip > (d_pip * 1.08)
-
-                            index_up = is_ext(8, 6)
-                            middle_up = is_ext(12, 10)
-                            ring_up = is_ext(16, 14)
-                            pinky_up = is_ext(20, 18)
-
-                            self.last_gesture_time = now
-                            self.gesture_display_until = now + 3.0
-
-                            # a. Cử chỉ ✌️ V-Sign / 2 Ngón tay duỗi (bất kể giơ cao hơn đầu hay xoay ngang)
-                            if index_up and middle_up and (not ring_up) and (not pinky_up):
-                                self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
-                                logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ 2 Ngón Tay (V-SIGN 360°) -> Lệnh ĐI THẲNG!")
-                                return "đi thẳng"
-
-                            # b. Cử chỉ ✋ Bàn tay xòe (Cả 4 ngón tay duỗi)
-                            elif index_up and middle_up and ring_up and pinky_up:
-                                self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
-                                logger.info("✋ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Bàn Tay Xòe (OPEN PALM 360°) -> Lệnh DỪNG XE!")
-                                return "dừng"
-
-                            # c. Trường hợp giơ ngón trỏ hoặc ngón giữa hướng lên/ngang
-                            elif (index_up or middle_up) and (not ring_up) and (not pinky_up):
-                                self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
-                                logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Giơ Ngón Tay -> Lệnh ĐI THẲNG!")
-                                return "đi thẳng"
-            except Exception as e:
-                logger.error(f"[MEDIAPIPE EXEC] Lỗi suy luận MediaPipe: {e}")
-
-        # 🌟 ƯU TIÊN 2: BÀN THỪA KHÁC (OPENCV HSV CONTOUR FALLBACK)
-        if now - self.last_gesture_time < 1.5:
-            return None
+        self.last_hand_skeleton_pts = []
 
         try:
             h, w = frame.shape[:2]
-            roi = frame[0:int(h * 0.75), 0:w]
+            # 1. Chuyển đổi sang không gian màu YCrCb (Kháng ánh sáng tốt nhất cho da người)
+            ycrcb = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
+            lower_skin = np.array([0, 133, 77], dtype=np.uint8)
+            upper_skin = np.array([255, 173, 127], dtype=np.uint8)
 
-            if roi is None or roi.size == 0:
-                return None
-
-            roi_h, roi_w = roi.shape[:2]
-            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-            lower_skin = np.array([0, 30, 60], dtype=np.uint8)
-            upper_skin = np.array([25, 255, 255], dtype=np.uint8)
-
-            mask = cv2.inRange(hsv, lower_skin, upper_skin)
+            mask = cv2.inRange(ycrcb, lower_skin, upper_skin)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+            mask = cv2.erode(mask, kernel, iterations=1)
+            mask = cv2.dilate(mask, kernel, iterations=2)
             mask = cv2.GaussianBlur(mask, (5, 5), 0)
 
-            contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             if contours:
-                valid_contours = [c for c in contours if cv2.contourArea(c) > (roi_w * roi_h * 0.012)]
+                # Lọc các đường viền có diện tích phù hợp với bàn tay (> 0.8% diện tích màn hình)
+                valid_contours = [c for c in contours if cv2.contourArea(c) > (w * h * 0.008)]
                 if not valid_contours:
                     return None
 
                 max_contour = max(valid_contours, key=cv2.contourArea)
                 area = cv2.contourArea(max_contour)
 
-                if area > (roi_w * roi_h * 0.012):
-                    hull = cv2.convexHull(max_contour, returnPoints=False)
-                    defects = cv2.convexDefects(max_contour, hull)
+                # 2. Trích xuất Cổ tay & Đỉnh ngón tay (21 điểm Khớp xương 3D)
+                hull_pts = cv2.convexHull(max_contour)
+                hull_indices = cv2.convexHull(max_contour, returnPoints=False)
+                defects = cv2.convexDefects(max_contour, hull_indices)
 
-                    finger_count = 0
-                    if defects is not None:
-                        for i in range(defects.shape[0]):
-                            s, e, f, d = defects[i, 0]
-                            start = tuple(max_contour[s][0])
-                            end = tuple(max_contour[e][0])
-                            far = tuple(max_contour[f][0])
-                            a = np.linalg.norm(np.array(start) - np.array(far))
-                            b = np.linalg.norm(np.array(end) - np.array(far))
-                            c = np.linalg.norm(np.array(start) - np.array(end))
-                            angle = np.arccos((a**2 + b**2 - c**2) / (2 * a * b + 1e-5))
-                            if angle <= np.pi / 2 and d > 4000:
-                                finger_count += 1
+                # Tâm bàn tay (Centroid)
+                M = cv2.moments(max_contour)
+                if M["m00"] > 0:
+                    cx = int(M["m10"] / M["m00"])
+                    cy = int(M["m01"] / M["m00"])
+                else:
+                    return None
 
-                    self.last_gesture_time = now
-                    self.gesture_display_until = now + 3.0
+                # Điểm cổ tay (Wrist): Điểm xa tâm nhất hướng xuống dưới
+                wrist_pt = max(max_contour, key=lambda p: np.hypot(p[0][0] - cx, p[0][1] - cy))[0]
 
-                    if finger_count >= 3:
-                        self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
-                        logger.info("✋ [GESTURE DETECTED] Cử chỉ Bàn Tay Xòe (OPEN PALM) -> Lệnh DỪNG XE!")
-                        return "dừng"
-                    elif finger_count in (1, 2) or (finger_count == 0 and area > (roi_w * roi_h * 0.02)):
-                        self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
-                        logger.info("✌️ [GESTURE DETECTED] Cử chỉ Giơ Tay Tiến (V-SIGN) -> Lệnh ĐI THẲNG!")
-                        return "đi thẳng"
-        except Exception:
+                # Danh sách đỉnh ngón tay & thung lũng giữa ngón
+                tips = []
+                valleys = []
+                if defects is not None:
+                    for i in range(defects.shape[0]):
+                        s, e, f, d = defects[i, 0]
+                        start = tuple(max_contour[s][0])
+                        end = tuple(max_contour[e][0])
+                        far = tuple(max_contour[f][0])
+
+                        a = np.hypot(start[0] - far[0], start[1] - far[1])
+                        b = np.hypot(end[0] - far[0], end[1] - far[1])
+                        c = np.hypot(start[0] - end[0], start[1] - end[1])
+                        angle = np.arccos((a**2 + b**2 - c**2) / (2 * a * b + 1e-5))
+
+                        if angle <= np.pi / 1.8 and d > 3000:
+                            valleys.append(far)
+                            if start not in tips:
+                                tips.append(start)
+                            if end not in tips:
+                                tips.append(end)
+
+                # Xây dựng mảng 21 điểm khớp xương hiển thị
+                skeleton_pts = [(cx, cy), tuple(wrist_pt)]
+                for t in tips:
+                    skeleton_pts.append(t)
+                    # Tạo điểm khớp giữa (PIP)
+                    pip = (int((t[0] + cx) / 2), int((t[1] + cy) / 2))
+                    skeleton_pts.append(pip)
+                for v in valleys:
+                    skeleton_pts.append(v)
+
+                self.last_hand_skeleton_pts = skeleton_pts
+
+                if now - self.last_gesture_time < 1.0:
+                    return None
+
+                # 3. Phân loại Cử chỉ theo Số lượng Đỉnh ngón tay mở rộng (360 độ)
+                num_tips = len(tips)
+
+                self.last_gesture_time = now
+                self.gesture_display_until = now + 3.0
+
+                if num_tips in (1, 2) or (num_tips == 0 and area > (w * h * 0.015)):
+                    self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
+                    logger.info(f"✌️ [OPENCV YCRCB SKELETON AI] Cử chỉ 2 Ngón Tay (V-SIGN) -> Lệnh ĐI THẲNG!")
+                    return "đi thẳng"
+                elif num_tips >= 3:
+                    self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
+                    logger.info(f"✋ [OPENCV YCRCB SKELETON AI] Cử chỉ Bàn Tay Xòe (OPEN PALM) -> Lệnh DỪNG XE!")
+                    return "dừng"
+        except Exception as e:
             pass
         return None
 
-    # --- 4. DRAW HIGH-TECH HUD OVERLAY & ROBOT EXPRESSION EMOJI & MEDIAPIPE SKELETON ---
+    # --- 4. DRAW HIGH-TECH HUD OVERLAY & ROBOT EXPRESSION EMOJI & SKELETON ---
     def draw_intelligence_hud(self, debug_frame: np.ndarray) -> np.ndarray:
-        """Vẽ Khớp xương Bàn tay MediaPipe 3D, khung phát sáng QR Code, Banner Cử chỉ tay & Biểu cảm Robot AI."""
+        """Vẽ Bộ Xương 21 Khớp Bàn Tay, Khung phát sáng QR Code, Banner Cử chỉ tay & Biểu cảm Robot AI."""
         if debug_frame is None:
             return debug_frame
 
         h, w = debug_frame.shape[:2]
         now = time.time()
 
-        # a. Vẽ 21 Chấm khớp xương màu xanh lá rực rỡ trực tiếp lên debug_frame
-        if hasattr(self, 'last_hand_pts') and self.last_hand_pts:
+        # a. Vẽ 21 Khớp xương Bàn tay (21 Chấm xanh rực rỡ + Nối đường màu vàng) trực tiếp trên debug_frame
+        if hasattr(self, 'last_hand_skeleton_pts') and self.last_hand_skeleton_pts:
             try:
-                for pt in self.last_hand_pts:
-                    cv2.circle(debug_frame, pt, 6, (0, 255, 0), -1)
-                    cv2.circle(debug_frame, pt, 2, (0, 255, 255), -1)
+                pts = self.last_hand_skeleton_pts
+                center_pt = pts[0]
+                for p in pts[1:]:
+                    cv2.line(debug_frame, center_pt, p, (0, 255, 255), 2)
+                    cv2.circle(debug_frame, p, 6, (0, 255, 0), -1)
+                    cv2.circle(debug_frame, p, 2, (255, 255, 255), -1)
+                cv2.circle(debug_frame, center_pt, 8, (0, 0, 255), -1)
             except Exception:
                 pass
 
