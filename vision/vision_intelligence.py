@@ -32,19 +32,20 @@ class VisionIntelligence:
         self.last_scanned_qr = ""
         self.last_qr_bbox = None
 
-        # 2. Khởi tạo Google MediaPipe 3D Hand Skeleton Landmark Engine
+        # 2. Khởi tạo Google MediaPipe 3D Hand Skeleton Landmark Engine (Siêu nhạy 0.20)
         self.hands_detector = None
+        self.last_hand_landmarks = None
         if MP_AVAILABLE:
             try:
                 self.mp_hands = mp.solutions.hands
                 self.hands_detector = self.mp_hands.Hands(
                     static_image_mode=False,
                     max_num_hands=2,
-                    min_detection_confidence=0.45,
-                    min_tracking_confidence=0.45
+                    min_detection_confidence=0.20,
+                    min_tracking_confidence=0.20
                 )
                 self.mp_draw = mp.solutions.drawing_utils
-                logger.info("🟢 [MEDIAPIPE AI] Khởi tạo Google MediaPipe 3D Hand Skeleton Engine thành công!")
+                logger.info("🟢 [MEDIAPIPE AI] Khởi tạo Google MediaPipe 3D Hand Skeleton Engine (Ultra-High Sensitivity 0.20) thành công!")
             except Exception as e:
                 logger.warning(f"⚠️ [MEDIAPIPE AI] Lỗi khởi tạo MediaPipe: {e}")
 
@@ -115,38 +116,35 @@ class VisionIntelligence:
     # --- 3. GOOGLE MEDIAPIPE 3D HAND SKELETON GESTURE DETECTOR ---
     def detect_hand_gesture(self, frame: np.ndarray, target: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
-        Nhận diện cử chỉ tay 3D qua Google MediaPipe Keypoints (21 Khớp xương ngón tay):
-        - ✌️ FORWARD (2 ngón tay giơ V-Sign / Giơ ngón trỏ + ngón giữa): Lệnh "đi thẳng"
+        Nhận diện cử chỉ tay 3D qua Google MediaPipe Keypoints (21 Khớp xương ngón tay trên toàn bộ khung hình):
+        - ✌️ FORWARD (2 ngón tay giơ V-Sign / Giơ ngón trỏ + ngón giữa bất kể hướng): Lệnh "đi thẳng"
         - ✋ STOP (5 ngón tay bàn tay xòe): Lệnh "dừng"
         """
         if frame is None:
             return None
         now = time.time()
-        if now - self.last_gesture_time < 1.5:
-            return None
 
-        # 🌟 ƯU TIÊN 1: DÙNG GOOGLE MEDIAPIPE 3D HAND SKELETON AI DETECTOR
+        # 🌟 ƯU TIÊN 1: DÙNG GOOGLE MEDIAPIPE 3D HAND SKELETON AI DETECTOR TRÊN TOÀN BỘ KHUNG HÌNH UNCROPPED
         if self.hands_detector is not None:
             try:
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 results = self.hands_detector.process(rgb_frame)
 
                 if results.multi_hand_landmarks:
-                    for hand_landmarks in results.multi_hand_landmarks:
-                        # Vẽ bộ xương 21 khớp tay 3D trực tiếp lên màn hình
-                        self.mp_draw.draw_landmarks(
-                            frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
-                            self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=3),
-                            self.mp_draw.DrawingSpec(color=(0, 255, 255), thickness=2)
-                        )
+                    self.last_hand_landmarks = results.multi_hand_landmarks
 
+                    if now - self.last_gesture_time < 1.2:
+                        return None
+
+                    for hand_landmarks in results.multi_hand_landmarks:
                         lm = hand_landmarks.landmark
-                        # Trạng thái duỗi ngón tay chuẩn xác 360 độ (Khoảng cách từ Cổ tay lm[0] tới Đỉnh ngón vs Khớp PIP)
+
+                        # Thuật toán tính khoảng cách Euclide 360 độ từ Cổ tay lm[0] tới Đỉnh ngón vs Khớp PIP
                         wrist_x, wrist_y = lm[0].x, lm[0].y
                         def is_ext(tip_i, pip_i):
                             d_tip = np.hypot(lm[tip_i].x - wrist_x, lm[tip_i].y - wrist_y)
                             d_pip = np.hypot(lm[pip_i].x - wrist_x, lm[pip_i].y - wrist_y)
-                            return d_tip > (d_pip * 1.12)
+                            return d_tip > (d_pip * 1.10)
 
                         index_up = is_ext(8, 6)
                         middle_up = is_ext(12, 10)
@@ -156,7 +154,7 @@ class VisionIntelligence:
                         self.last_gesture_time = now
                         self.gesture_display_until = now + 3.0
 
-                        # a. Cử chỉ ✌️ V-Sign / 2 Ngón tay duỗi (bất kể xoay dọc hay xoay ngang)
+                        # a. Cử chỉ ✌️ V-Sign / 2 Ngón tay duỗi (bất kể giơ cao hơn đầu hay xoay ngang)
                         if index_up and middle_up and (not ring_up) and (not pinky_up):
                             self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
                             logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ 2 Ngón Tay (V-SIGN 360°) -> Lệnh ĐI THẲNG!")
@@ -168,30 +166,24 @@ class VisionIntelligence:
                             logger.info("✋ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Bàn Tay Xòe (OPEN PALM 360°) -> Lệnh DỪNG XE!")
                             return "dừng"
 
-                        # c. Trường hợp giơ ngón trỏ hoặc ngón giữa
+                        # c. Trường hợp giơ ngón trỏ hoặc ngón giữa hướng lên/ngang
                         elif (index_up or middle_up) and (not ring_up) and (not pinky_up):
                             self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
                             logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Giơ Ngón Tay -> Lệnh ĐI THẲNG!")
                             return "đi thẳng"
+                else:
+                    self.last_hand_landmarks = None
             except Exception as e:
                 logger.error(f"[MEDIAPIPE EXEC] Lỗi suy luận MediaPipe: {e}")
 
         # 🌟 ƯU TIÊN 2: BÀN THỪA KHÁC (OPENCV HSV CONTOUR FALLBACK)
+        if now - self.last_gesture_time < 1.5:
+            return None
+
         try:
             h, w = frame.shape[:2]
-            if target and ("x1" in target or "bbox" in target):
-                if "bbox" in target:
-                    tx1, ty1, tx2, ty2 = target["bbox"]
-                else:
-                    tx1, ty1, tx2, ty2 = target["x1"], target["y1"], target["x2"], target["y2"]
-
-                crop_y1 = max(0, ty1)
-                crop_y2 = min(h, int(ty1 + (ty2 - ty1) * 0.48))
-                crop_x1 = max(0, int(tx1 - (tx2 - tx1) * 0.15))
-                crop_x2 = min(w, int(tx2 + (tx2 - tx1) * 0.15))
-                roi = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-            else:
-                roi = frame[int(h * 0.05):int(h * 0.5), int(w * 0.15):int(w * 0.85)]
+            # Quét toàn bộ vùng thân trên mở rộng (từ đỉnh màn hình đến thắt lưng)
+            roi = frame[0:int(h * 0.75), 0:w]
 
             if roi is None or roi.size == 0:
                 return None
@@ -206,14 +198,14 @@ class VisionIntelligence:
 
             contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             if contours:
-                valid_contours = [c for c in contours if cv2.contourArea(c) > (roi_w * roi_h * 0.015)]
+                valid_contours = [c for c in contours if cv2.contourArea(c) > (roi_w * roi_h * 0.012)]
                 if not valid_contours:
                     return None
 
                 max_contour = max(valid_contours, key=cv2.contourArea)
                 area = cv2.contourArea(max_contour)
 
-                if area > (roi_w * roi_h * 0.015):
+                if area > (roi_w * roi_h * 0.012):
                     hull = cv2.convexHull(max_contour, returnPoints=False)
                     defects = cv2.convexDefects(max_contour, hull)
 
@@ -246,27 +238,39 @@ class VisionIntelligence:
             pass
         return None
 
-    # --- 4. DRAW HIGH-TECH HUD OVERLAY & ROBOT EXPRESSION EMOJI ---
+    # --- 4. DRAW HIGH-TECH HUD OVERLAY & ROBOT EXPRESSION EMOJI & MEDIAPIPE SKELETON ---
     def draw_intelligence_hud(self, debug_frame: np.ndarray) -> np.ndarray:
-        """Vẽ khung phát sáng QR Code, Banner Cử chỉ tay & Mặt biểu cảm Robot AI."""
+        """Vẽ Khớp xương Bàn tay MediaPipe 3D, khung phát sáng QR Code, Banner Cử chỉ tay & Biểu cảm Robot AI."""
         if debug_frame is None:
             return debug_frame
 
         h, w = debug_frame.shape[:2]
         now = time.time()
 
-        # a. Vẽ Biểu cảm Robot AI (Expression Emoji) góc trên bên phải
+        # a. Vẽ Bộ xương 21 khớp tay 3D MediaPipe trực tiếp lên debug_frame hiển thị
+        if self.last_hand_landmarks and MP_AVAILABLE:
+            try:
+                for hand_landmarks in self.last_hand_landmarks:
+                    self.mp_draw.draw_landmarks(
+                        debug_frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
+                        self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=3, circle_radius=4),
+                        self.mp_draw.DrawingSpec(color=(0, 255, 255), thickness=2)
+                    )
+            except Exception:
+                pass
+
+        # b. Vẽ Biểu cảm Robot AI (Expression Emoji) góc trên bên phải
         cv2.putText(debug_frame, f"AI: {self.current_expression}", (w - 240, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, self.expression_color, 2)
 
-        # b. Vẽ khung phát sáng QR Code
+        # c. Vẽ khung phát sáng QR Code
         if self.last_qr_bbox is not None and len(self.last_qr_bbox) >= 4:
             pts = np.int32(self.last_qr_bbox)
             cv2.polylines(debug_frame, [pts], isClosed=True, color=(255, 255, 0), thickness=3)
             cv2.putText(debug_frame, f"QR VALIDATED: {self.last_scanned_qr}", (pts[0][0], max(pts[0][1] - 10, 30)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
-        # c. Vẽ HUD Banner Cử chỉ tay (Hand Gesture HUD)
+        # d. Vẽ HUD Banner Cử chỉ tay (Hand Gesture HUD)
         if now < self.gesture_display_until and self.last_detected_gesture:
             overlay = debug_frame.copy()
             cv2.rectangle(overlay, (w // 2 - 180, 10), (w // 2 + 180, 55), (0, 0, 0), -1)
