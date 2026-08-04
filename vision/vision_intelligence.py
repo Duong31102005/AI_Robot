@@ -116,63 +116,89 @@ class VisionIntelligence:
     # --- 3. GOOGLE MEDIAPIPE 3D HAND SKELETON GESTURE DETECTOR ---
     def detect_hand_gesture(self, frame: np.ndarray, target: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
-        Nhận diện cử chỉ tay 3D qua Google MediaPipe Keypoints (21 Khớp xương ngón tay trên toàn bộ khung hình):
+        Nhận diện cử chỉ tay 3D qua Google MediaPipe Keypoints (21 Khớp xương ngón tay):
         - ✌️ FORWARD (2 ngón tay giơ V-Sign / Giơ ngón trỏ + ngón giữa bất kể hướng): Lệnh "đi thẳng"
         - ✋ STOP (5 ngón tay bàn tay xòe): Lệnh "dừng"
         """
         if frame is None:
             return None
         now = time.time()
+        self.last_hand_pts = []  # Lưu tọa độ tuyệt đối pixel để vẽ khớp xương rực rỡ
 
-        # 🌟 ƯU TIÊN 1: DÙNG GOOGLE MEDIAPIPE 3D HAND SKELETON AI DETECTOR TRÊN TOÀN BỘ KHUNG HÌNH UNCROPPED
+        # 🌟 ƯU TIÊN 1: DÙNG GOOGLE MEDIAPIPE 3D HAND SKELETON AI DETECTOR TRÊN VÙNG ZOOM 2.0X PHÓNG TỎ BAN TAY
         if self.hands_detector is not None:
             try:
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.hands_detector.process(rgb_frame)
+                h, w = frame.shape[:2]
+                # Xác định vùng ROI người/thân trên
+                if target and ("x1" in target or "bbox" in target):
+                    tx1 = target.get("x1", target.get("bbox", [0,0,w,h])[0])
+                    ty1 = target.get("y1", target.get("bbox", [0,0,w,h])[1])
+                    tx2 = target.get("x2", target.get("bbox", [0,0,w,h])[2])
+                    ty2 = target.get("y2", target.get("bbox", [0,0,w,h])[3])
 
-                if results.multi_hand_landmarks:
-                    self.last_hand_landmarks = results.multi_hand_landmarks
-
-                    if now - self.last_gesture_time < 1.2:
-                        return None
-
-                    for hand_landmarks in results.multi_hand_landmarks:
-                        lm = hand_landmarks.landmark
-
-                        # Thuật toán tính khoảng cách Euclide 360 độ từ Cổ tay lm[0] tới Đỉnh ngón vs Khớp PIP
-                        wrist_x, wrist_y = lm[0].x, lm[0].y
-                        def is_ext(tip_i, pip_i):
-                            d_tip = np.hypot(lm[tip_i].x - wrist_x, lm[tip_i].y - wrist_y)
-                            d_pip = np.hypot(lm[pip_i].x - wrist_x, lm[pip_i].y - wrist_y)
-                            return d_tip > (d_pip * 1.10)
-
-                        index_up = is_ext(8, 6)
-                        middle_up = is_ext(12, 10)
-                        ring_up = is_ext(16, 14)
-                        pinky_up = is_ext(20, 18)
-
-                        self.last_gesture_time = now
-                        self.gesture_display_until = now + 3.0
-
-                        # a. Cử chỉ ✌️ V-Sign / 2 Ngón tay duỗi (bất kể giơ cao hơn đầu hay xoay ngang)
-                        if index_up and middle_up and (not ring_up) and (not pinky_up):
-                            self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
-                            logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ 2 Ngón Tay (V-SIGN 360°) -> Lệnh ĐI THẲNG!")
-                            return "đi thẳng"
-
-                        # b. Cử chỉ ✋ Bàn tay xòe (Cả 4 ngón tay duỗi)
-                        elif index_up and middle_up and ring_up and pinky_up:
-                            self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
-                            logger.info("✋ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Bàn Tay Xòe (OPEN PALM 360°) -> Lệnh DỪNG XE!")
-                            return "dừng"
-
-                        # c. Trường hợp giơ ngón trỏ hoặc ngón giữa hướng lên/ngang
-                        elif (index_up or middle_up) and (not ring_up) and (not pinky_up):
-                            self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
-                            logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Giơ Ngón Tay -> Lệnh ĐI THẲNG!")
-                            return "đi thẳng"
+                    crop_y1 = max(0, int(ty1 - (ty2 - ty1) * 0.25))
+                    crop_y2 = min(h, int(ty1 + (ty2 - ty1) * 0.75))
+                    crop_x1 = max(0, int(tx1 - (tx2 - tx1) * 0.3))
+                    crop_x2 = min(w, int(tx2 + (tx2 - tx1) * 0.3))
                 else:
-                    self.last_hand_landmarks = None
+                    crop_y1, crop_y2, crop_x1, crop_x2 = 0, int(h * 0.8), int(w * 0.1), int(w * 0.9)
+
+                roi = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+                if roi is not None and roi.size > 0:
+                    # Phóng to vùng ROI 2.0x để MediaPipe bắt trọn bàn tay nhỏ ở xa
+                    roi_zoomed = cv2.resize(roi, (0, 0), fx=2.0, fy=2.0)
+                    rgb_zoomed = cv2.cvtColor(roi_zoomed, cv2.COLOR_BGR2RGB)
+                    results = self.hands_detector.process(rgb_zoomed)
+
+                    if results and results.multi_hand_landmarks:
+                        for hand_landmarks in results.multi_hand_landmarks:
+                            lm = hand_landmarks.landmark
+
+                            # Tính tọa độ pixel tuyệt đối để vẽ khớp xương rực rỡ
+                            roi_w_orig = crop_x2 - crop_x1
+                            roi_h_orig = crop_y2 - crop_y1
+                            pts = []
+                            for pt in lm:
+                                px = int(crop_x1 + (pt.x * roi_w_orig))
+                                py = int(crop_y1 + (pt.y * roi_h_orig))
+                                pts.append((px, py))
+                            self.last_hand_pts = pts
+
+                            if now - self.last_gesture_time < 1.2:
+                                return None
+
+                            # Thuật toán tính khoảng cách Euclide 360 độ từ Cổ tay lm[0] tới Đỉnh ngón vs Khớp PIP
+                            wrist_x, wrist_y = lm[0].x, lm[0].y
+                            def is_ext(tip_i, pip_i):
+                                d_tip = np.hypot(lm[tip_i].x - wrist_x, lm[tip_i].y - wrist_y)
+                                d_pip = np.hypot(lm[pip_i].x - wrist_x, lm[pip_i].y - wrist_y)
+                                return d_tip > (d_pip * 1.08)
+
+                            index_up = is_ext(8, 6)
+                            middle_up = is_ext(12, 10)
+                            ring_up = is_ext(16, 14)
+                            pinky_up = is_ext(20, 18)
+
+                            self.last_gesture_time = now
+                            self.gesture_display_until = now + 3.0
+
+                            # a. Cử chỉ ✌️ V-Sign / 2 Ngón tay duỗi (bất kể giơ cao hơn đầu hay xoay ngang)
+                            if index_up and middle_up and (not ring_up) and (not pinky_up):
+                                self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
+                                logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ 2 Ngón Tay (V-SIGN 360°) -> Lệnh ĐI THẲNG!")
+                                return "đi thẳng"
+
+                            # b. Cử chỉ ✋ Bàn tay xòe (Cả 4 ngón tay duỗi)
+                            elif index_up and middle_up and ring_up and pinky_up:
+                                self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
+                                logger.info("✋ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Bàn Tay Xòe (OPEN PALM 360°) -> Lệnh DỪNG XE!")
+                                return "dừng"
+
+                            # c. Trường hợp giơ ngón trỏ hoặc ngón giữa hướng lên/ngang
+                            elif (index_up or middle_up) and (not ring_up) and (not pinky_up):
+                                self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
+                                logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Giơ Ngón Tay -> Lệnh ĐI THẲNG!")
+                                return "đi thẳng"
             except Exception as e:
                 logger.error(f"[MEDIAPIPE EXEC] Lỗi suy luận MediaPipe: {e}")
 
@@ -182,7 +208,6 @@ class VisionIntelligence:
 
         try:
             h, w = frame.shape[:2]
-            # Quét toàn bộ vùng thân trên mở rộng (từ đỉnh màn hình đến thắt lưng)
             roi = frame[0:int(h * 0.75), 0:w]
 
             if roi is None or roi.size == 0:
@@ -247,15 +272,12 @@ class VisionIntelligence:
         h, w = debug_frame.shape[:2]
         now = time.time()
 
-        # a. Vẽ Bộ xương 21 khớp tay 3D MediaPipe trực tiếp lên debug_frame hiển thị
-        if self.last_hand_landmarks and MP_AVAILABLE:
+        # a. Vẽ 21 Chấm khớp xương màu xanh lá rực rỡ trực tiếp lên debug_frame
+        if hasattr(self, 'last_hand_pts') and self.last_hand_pts:
             try:
-                for hand_landmarks in self.last_hand_landmarks:
-                    self.mp_draw.draw_landmarks(
-                        debug_frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
-                        self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=3, circle_radius=4),
-                        self.mp_draw.DrawingSpec(color=(0, 255, 255), thickness=2)
-                    )
+                for pt in self.last_hand_pts:
+                    cv2.circle(debug_frame, pt, 6, (0, 255, 0), -1)
+                    cv2.circle(debug_frame, pt, 2, (0, 255, 255), -1)
             except Exception:
                 pass
 
