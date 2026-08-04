@@ -6,7 +6,7 @@ import threading
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from audio.streaming_stt import WhisperStreamingSTT
+from audio.phowhisper_stt import PhoWhisperSTT as WhisperStreamingSTT
 from api.stt_websocket import broadcast_stt_event
 from audio.tts_engine import TTSEngine
 from llm.ollama_llm import OllamaLLM
