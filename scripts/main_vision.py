@@ -41,6 +41,7 @@ def main():
     prev_time = time.time()
     last_send_time = 0.0
     last_tts_warn_time = 0.0
+    obstacle_start_time = 0.0
     last_sent_status = ""
     fps = 0.0
     frame_count = 0
@@ -88,8 +89,8 @@ def main():
                 logger.info(f"📦 [DELIVERY QR SUCCESS] Quét thành công: '{scanned_qr}'")
                 threading.Thread(target=pi_client.send_tts, args=(qr_text,), daemon=True).start()
 
-            # b. Nhận diện cử chỉ tay (✋ Stop / ✌️ Go)
-            gesture_cmd = vision_intelligence.detect_hand_gesture(frame)
+            # b. Nhận diện cử chỉ tay (✋ Stop / ✌️ Go) trên vùng thân người mục tiêu
+            gesture_cmd = vision_intelligence.detect_hand_gesture(frame, target=target)
             if gesture_cmd:
                 g_text = f"Kim Qui đã nhận cử chỉ tay {gesture_cmd}"
                 logger.info(f"✋ [GESTURE CONTROL] Thực thi cử chỉ: '{gesture_cmd}'")
@@ -101,22 +102,28 @@ def main():
             if face_greeting:
                 logger.info(f"😊 [FACE GREETING] Chào khách hàng: '{face_greeting}'")
                 threading.Thread(target=pi_client.send_tts, args=(face_greeting,), daemon=True).start()
-            # 4. Logic Robot Giao Hàng & Cảnh Báo Chướng Ngại Vật (Delivery & Obstacle Avoidance):
+
+            # 4. Logic Robot Giao Hàng & Bộ Lọc Cảnh Báo Vật Cản Duy Trì 2.5 Giây (2.5s Persistence Obstacle Filter):
             delivery_status = "DANG_DI_CHUYEN_GIAO_HANG"
             if target is not None:
                 error_x, pos = calculate_person_position(target, w)
                 height_ratio = target["height"] / float(h)
 
-                # Chỉ cảnh báo chướng ngại vật KHI VẬT CẢN Ở SÁT MẶT (< 50cm, height_ratio >= 0.70) VÀ Ở CHÍNH GIỮA LỐI ĐI
-                if height_ratio >= 0.70 and abs(error_x) <= 0.35:
-                    delivery_status = "CANH_BAO_VAT_CAN_GAN"
+                # Vật cản phải chiếm > 85% chiều cao (< 40cm sát mặt camera), đúng trung tâm và CHẮN LIÊN TỤC TRÊN 2.5 GIÂY!
+                if height_ratio >= 0.85 and abs(error_x) <= 0.30:
+                    if obstacle_start_time == 0.0:
+                        obstacle_start_time = curr_time
+                    elif (curr_time - obstacle_start_time) >= 2.5:
+                        delivery_status = "CANH_BAO_VAT_CAN_GAN"
+                else:
+                    obstacle_start_time = 0.0
 
-            # 5. Gửi cảnh báo giọng nói ra Loa Robot nếu vật cản ở quá sát mặt (< 50cm) (Cooldown 10s)
+            # 5. Gửi cảnh báo giọng nói ra Loa Robot nếu vật cản CHẮN LIÊN TỤC TRÊN 2.5 GIÂY (Cooldown 10s)
             if (curr_time - last_send_time) >= SEND_COMMAND_INTERVAL:
                 if delivery_status == "CANH_BAO_VAT_CAN_GAN" and (curr_time - last_tts_warn_time) > 10.0:
                     last_tts_warn_time = curr_time
-                    logger.warning("[SAFETY ALERT] Cảnh báo chướng ngại vật sát mặt (<50cm)! Phát loa xin nhường đường...")
-                    warn_text = "Phía trước có vật cản quá gần, xin vui lòng tránh đường cho robot giao hàng, xin cảm ơn!"
+                    logger.warning("[SAFETY ALERT] Cảnh báo vật cản chắn mặt liên tục >2.5s! Phát loa xin nhường đường...")
+                    warn_text = "Phía trước có vật cản chắn đường quá lâu, xin vui lòng tránh đường cho robot giao hàng, xin cảm ơn!"
                     threading.Thread(target=pi_client.send_tts, args=(warn_text,), daemon=True).start()
 
                 last_sent_status = delivery_status

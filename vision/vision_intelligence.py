@@ -90,22 +90,39 @@ class VisionIntelligence:
         return None
 
     # --- 3. HAND GESTURE CONTROL (Cử chỉ tay ✋ Stop / ✌️ Go + HUD Overlay) ---
-    def detect_hand_gesture(self, frame: np.ndarray) -> Optional[str]:
+    def detect_hand_gesture(self, frame: np.ndarray, target: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
-        Nhận diện cử chỉ tay đơn giản qua phân tích đường viền (Hand Contour Perception):
+        Nhận diện cử chỉ tay trên vùng thân trên của người mục tiêu (Upper Body Crop ROI):
         - ✋ STOP: Bàn tay xòe trước camera -> Trả về "dừng"
         - ✌️ FORWARD: Hai ngón tay / Giơ tay -> Trả về "đi thẳng"
         """
         if frame is None:
             return None
         now = time.time()
-        if now - self.last_gesture_time < 2.5:
+        if now - self.last_gesture_time < 2.0:
             return None
 
         try:
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            lower_skin = np.array([0, 20, 70], dtype=np.uint8)
-            upper_skin = np.array([20, 255, 255], dtype=np.uint8)
+            h, w = frame.shape[:2]
+            # Cắt vùng thân trên của người mục tiêu (nếu phát hiện người), nếu không dùng vùng giữa màn hình
+            if target and "bbox" in target:
+                tx1, ty1, tx2, ty2 = target["bbox"]
+                # Thân trên từ đầu đến thắt lưng + mở rộng 2 bên tay
+                crop_y1 = max(0, ty1)
+                crop_y2 = min(h, int(ty1 + (ty2 - ty1) * 0.65))
+                crop_x1 = max(0, int(tx1 - (tx2 - tx1) * 0.2))
+                crop_x2 = min(w, int(tx2 + (tx2 - tx1) * 0.2))
+                roi = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+            else:
+                roi = frame[int(h * 0.1):int(h * 0.7), int(w * 0.15):int(w * 0.85)]
+
+            if roi is None or roi.size == 0:
+                return None
+
+            roi_h, roi_w = roi.shape[:2]
+            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            lower_skin = np.array([0, 35, 60], dtype=np.uint8)
+            upper_skin = np.array([25, 255, 255], dtype=np.uint8)
 
             mask = cv2.inRange(hsv, lower_skin, upper_skin)
             mask = cv2.GaussianBlur(mask, (5, 5), 0)
@@ -114,15 +131,14 @@ class VisionIntelligence:
             if contours:
                 max_contour = max(contours, key=cv2.contourArea)
                 area = cv2.contourArea(max_contour)
-                h, w = frame.shape[:2]
 
-                # Nếu vùng bàn tay chiếm > 4% màn hình trước camera
-                if area > (w * h * 0.04):
+                # Nếu vùng tay lớn chiếm > 2.5% vùng ROI thân trên
+                if area > (roi_w * roi_h * 0.025):
                     hull = cv2.convexHull(max_contour, returnPoints=False)
                     defects = cv2.convexDefects(max_contour, hull)
 
+                    finger_count = 0
                     if defects is not None:
-                        finger_count = 0
                         for i in range(defects.shape[0]):
                             s, e, f, d = defects[i, 0]
                             start = tuple(max_contour[s][0])
@@ -132,20 +148,20 @@ class VisionIntelligence:
                             b = np.linalg.norm(np.array(end) - np.array(far))
                             c = np.linalg.norm(np.array(start) - np.array(end))
                             angle = np.arccos((a**2 + b**2 - c**2) / (2 * a * b + 1e-5))
-                            if angle <= np.pi / 2 and d > 12000:
+                            if angle <= np.pi / 2 and d > 8000:
                                 finger_count += 1
 
-                        self.last_gesture_time = now
-                        self.gesture_display_until = now + 3.0
+                    self.last_gesture_time = now
+                    self.gesture_display_until = now + 3.0
 
-                        if finger_count >= 3:
-                            self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
-                            logger.info("✋ [GESTURE DETECTED] Cử chỉ Bàn Tay Xòe (OPEN PALM) -> Lệnh DỪNG XE!")
-                            return "dừng"
-                        elif finger_count in (1, 2):
-                            self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
-                            logger.info("✌️ [GESTURE DETECTED] Cử chỉ Giơ Tay Tiến (V-SIGN) -> Lệnh ĐI THẲNG!")
-                            return "đi thẳng"
+                    if finger_count >= 3:
+                        self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
+                        logger.info("✋ [GESTURE DETECTED] Cử chỉ Bàn Tay Xòe (OPEN PALM) -> Lệnh DỪNG XE!")
+                        return "dừng"
+                    elif finger_count in (1, 2) or (finger_count == 0 and area > (roi_w * roi_h * 0.05)):
+                        self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
+                        logger.info("✌️ [GESTURE DETECTED] Cử chỉ Giơ Tay Tiến (V-SIGN) -> Lệnh ĐI THẲNG!")
+                        return "đi thẳng"
         except Exception:
             pass
         return None
