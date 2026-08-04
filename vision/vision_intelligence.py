@@ -7,12 +7,19 @@ from utils.logger import get_logger
 
 logger = get_logger("VisionIntelligence")
 
+# Nạp động Google MediaPipe 3D Hand Landmark Engine
+try:
+    import mediapipe as mp
+    MP_AVAILABLE = True
+except Exception:
+    MP_AVAILABLE = False
+
 
 class VisionIntelligence:
     """
     Module Tích hợp Các Tính Năng Thị Giác AI Cao Cấp Đa Tầng cho Robot Otio / Kim Qui:
-    1. QR Code Scanner (Xác thực mã nhận hàng + Hiển thị khung phát sáng)
-    2. Hand Gesture Perception (Cử chỉ tay Dừng ✋ / Tiến ✌️ + Giao diện HUD)
+    1. Google MediaPipe 3D Hand Landmark AI Detector (Cử chỉ tay 2 ngón ✌️ Tiến / 5 ngón ✋ Dừng)
+    2. QR Code Scanner (Xác thực mã nhận hàng + Hiển thị khung phát sáng)
     3. Face Detection & Personal Greeting (Nhận diện khuôn mặt & Chào hỏi khách hàng)
     4. Interactive Robot Expression HUD (Mặt biểu cảm kỹ thuật số AI)
     5. Multi-modal Vision Scene Memory (Ghi nhớ bối cảnh thị giác nối tiếp)
@@ -25,23 +32,39 @@ class VisionIntelligence:
         self.last_scanned_qr = ""
         self.last_qr_bbox = None
 
-        # 2. Khởi tạo OpenCV Face Cascade Detector
+        # 2. Khởi tạo Google MediaPipe 3D Hand Skeleton Landmark Engine
+        self.hands_detector = None
+        if MP_AVAILABLE:
+            try:
+                self.mp_hands = mp.solutions.hands
+                self.hands_detector = self.mp_hands.Hands(
+                    static_image_mode=False,
+                    max_num_hands=2,
+                    min_detection_confidence=0.45,
+                    min_tracking_confidence=0.45
+                )
+                self.mp_draw = mp.solutions.drawing_utils
+                logger.info("🟢 [MEDIAPIPE AI] Khởi tạo Google MediaPipe 3D Hand Skeleton Engine thành công!")
+            except Exception as e:
+                logger.warning(f"⚠️ [MEDIAPIPE AI] Lỗi khởi tạo MediaPipe: {e}")
+
+        # 3. Khởi tạo OpenCV Face Cascade Detector
         try:
             self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         except Exception:
             self.face_cascade = None
         self.last_face_greeting_time = 0.0
 
-        # 3. Khởi tạo Gesture Perception & HUD
+        # 4. Khởi tạo Gesture Perception & HUD
         self.last_gesture_time = 0.0
         self.last_detected_gesture = ""
         self.gesture_display_until = 0.0
 
-        # 4. Trạng thái Biểu cảm Robot AI (Expression Engine)
+        # 5. Trạng thái Biểu cảm Robot AI (Expression Engine)
         self.current_expression = "(◕‿◕) HAPPY"
         self.expression_color = (0, 255, 0)
 
-        # 5. Ghi nhớ bối cảnh thị giác (Scene Memory)
+        # 6. Ghi nhớ bối cảnh thị giác (Scene Memory)
         self.current_frame: Optional[np.ndarray] = None
         self.last_scene_description = ""
 
@@ -89,22 +112,68 @@ class VisionIntelligence:
             pass
         return None
 
-    # --- 3. HAND GESTURE CONTROL (Cử chỉ tay ✋ Stop / ✌️ Go + HUD Overlay) ---
+    # --- 3. GOOGLE MEDIAPIPE 3D HAND SKELETON GESTURE DETECTOR ---
     def detect_hand_gesture(self, frame: np.ndarray, target: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
-        Nhận diện cử chỉ tay trên vùng thân trên của người mục tiêu (Upper Body Crop ROI):
-        - ✋ STOP: Bàn tay xòe trước camera -> Trả về "dừng"
-        - ✌️ FORWARD: Hai ngón tay / Giơ tay -> Trả về "đi thẳng"
+        Nhận diện cử chỉ tay 3D qua Google MediaPipe Keypoints (21 Khớp xương ngón tay):
+        - ✌️ FORWARD (2 ngón tay giơ V-Sign / Giơ ngón trỏ + ngón giữa): Lệnh "đi thẳng"
+        - ✋ STOP (5 ngón tay bàn tay xòe): Lệnh "dừng"
         """
         if frame is None:
             return None
         now = time.time()
-        if now - self.last_gesture_time < 2.0:
+        if now - self.last_gesture_time < 1.5:
             return None
 
+        # 🌟 ƯU TIÊN 1: DÙNG GOOGLE MEDIAPIPE 3D HAND SKELETON AI DETECTOR
+        if self.hands_detector is not None:
+            try:
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                results = self.hands_detector.process(rgb_frame)
+
+                if results.multi_hand_landmarks:
+                    for hand_landmarks in results.multi_hand_landmarks:
+                        # Vẽ bộ xương 21 khớp tay 3D trực tiếp lên màn hình
+                        self.mp_draw.draw_landmarks(
+                            frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
+                            self.mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=3),
+                            self.mp_draw.DrawingSpec(color=(0, 255, 255), thickness=2)
+                        )
+
+                        lm = hand_landmarks.landmark
+                        # Trạng thái duỗi ngón tay (So sánh độ cao Y đỉnh ngón so với khớp PIP)
+                        index_up = lm[8].y < lm[6].y
+                        middle_up = lm[12].y < lm[10].y
+                        ring_up = lm[16].y < lm[14].y
+                        pinky_up = lm[20].y < lm[18].y
+                        thumb_up = lm[4].y < lm[3].y or (abs(lm[4].x - lm[2].x) > 0.05)
+
+                        self.last_gesture_time = now
+                        self.gesture_display_until = now + 3.0
+
+                        # a. Cử chỉ ✌️ V-Sign (2 ngón tay Trỏ + Giữa duỗi lên, 2 ngón khác gập xuống)
+                        if index_up and middle_up and (not ring_up) and (not pinky_up):
+                            self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
+                            logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ 2 Ngón Tay (V-SIGN) -> Lệnh ĐI THẲNG!")
+                            return "đi thẳng"
+
+                        # b. Cử chỉ ✋ Bàn tay xòe (Cả 4-5 ngón tay đều duỗi mở rộng)
+                        elif index_up and middle_up and ring_up and pinky_up:
+                            self.last_detected_gesture = "✋ GESTURE: STOP (DỪNG)"
+                            logger.info("✋ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Bàn Tay Xòe (OPEN PALM) -> Lệnh DỪNG XE!")
+                            return "dừng"
+
+                        # c. Trường hợp giơ 1 hoặc 2 ngón bất kỳ hướng lên
+                        elif index_up and (not ring_up) and (not pinky_up):
+                            self.last_detected_gesture = "✌️ GESTURE: GO (TIẾN)"
+                            logger.info("✌️ [MEDIAPIPE 3D AI] Nhận diện Cử chỉ Giơ Ngón Tay -> Lệnh ĐI THẲNG!")
+                            return "đi thẳng"
+            except Exception as e:
+                logger.error(f"[MEDIAPIPE EXEC] Lỗi suy luận MediaPipe: {e}")
+
+        # 🌟 ƯU TIÊN 2: BÀN THỪA KHÁC (OPENCV HSV CONTOUR FALLBACK)
         try:
             h, w = frame.shape[:2]
-            # Cắt vùng thân trên (từ ngực lên đầu, phía trên mặt bàn) của người mục tiêu
             if target and ("x1" in target or "bbox" in target):
                 if "bbox" in target:
                     tx1, ty1, tx2, ty2 = target["bbox"]
@@ -112,7 +181,7 @@ class VisionIntelligence:
                     tx1, ty1, tx2, ty2 = target["x1"], target["y1"], target["x2"], target["y2"]
 
                 crop_y1 = max(0, ty1)
-                crop_y2 = min(h, int(ty1 + (ty2 - ty1) * 0.48))  # Chỉ lấy 48% phía trên (tránh mặt bàn gỗ)
+                crop_y2 = min(h, int(ty1 + (ty2 - ty1) * 0.48))
                 crop_x1 = max(0, int(tx1 - (tx2 - tx1) * 0.15))
                 crop_x2 = min(w, int(tx2 + (tx2 - tx1) * 0.15))
                 roi = frame[crop_y1:crop_y2, crop_x1:crop_x2]
@@ -132,7 +201,6 @@ class VisionIntelligence:
 
             contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             if contours:
-                # Tìm các đường viền bàn tay (loại bỏ viền khuôn mặt ở giữa nếu có)
                 valid_contours = [c for c in contours if cv2.contourArea(c) > (roi_w * roi_h * 0.015)]
                 if not valid_contours:
                     return None
