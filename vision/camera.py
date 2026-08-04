@@ -47,12 +47,17 @@ class Camera:
             return True
         else:
             try:
-                self.cap = cv2.VideoCapture(self.camera_index)
+                # DirectShow backend (cv2.CAP_DSHOW) allows concurrent Microphone audio access on Windows USB webcams
+                self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+                if not self.cap or not self.cap.isOpened():
+                    self.cap = cv2.VideoCapture(self.camera_index)
+
                 if not self.cap or not self.cap.isOpened():
                     logger.error(f"[VISION] Camera failed to open (index {self.camera_index})")
                     self._running = False
                     return False
 
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
                 self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
                 self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
                 self.cap.set(cv2.CAP_PROP_FPS, self.fps)

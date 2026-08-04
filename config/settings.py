@@ -20,7 +20,7 @@ FRAME_HEIGHT = 480
 TARGET_FPS = 30
 
 # --- YOLO Configuration ---
-YOLO_MODEL = os.getenv("YOLO_MODEL", "yolo26m.pt")
+YOLO_MODEL = os.getenv("YOLO_MODEL", "yolo11s.pt")
 YOLO_MODEL_NAME = YOLO_MODEL  # Tương thích ngược
 YOLO_CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", 0.40))
 CONFIDENCE_THRESHOLD = YOLO_CONFIDENCE  # Tương thích ngược
@@ -29,20 +29,23 @@ YOLO_PERSON_CLASS = 0  # Class ID của 'person' trong COCO dataset
 VISION_DEBUG = os.getenv("VISION_DEBUG", "True").lower() in ("true", "1", "yes")
 
 OBSTACLE_CLASSES = [
-    "person",
-    "bicycle",
-    "motorcycle",
-    "car",
-    "truck",
-    "bus",
-    "chair",
-    "bench",
-    "couch",
-    "dining table",
-    "suitcase",
-    "backpack",
-    "dog",
-    "cat"
+    # 👥 Con người & Động vật
+    "person", "dog", "cat",
+    
+    # 🪑 Nội thất Bàn Ghế & Đồ gia dụng
+    "chair", "couch", "dining table", "bed", "bench", "potted plant", "vase",
+    
+    # 💻 Thiết bị Điện tử & Công nghệ
+    "tv", "laptop", "mouse", "keyboard", "cell phone", "remote", "clock",
+    
+    # 📦 Hành lý & Đồ tư trang
+    "backpack", "handbag", "suitcase", "umbrella",
+    
+    # 🍱 Đồ ăn / Thức uống Giao hàng (Delivery)
+    "bottle", "cup", "wine glass", "bowl", "apple", "sandwich",
+    
+    # 🚗 Phương tiện & Vật cản ngoài đường
+    "car", "motorcycle", "bicycle", "bus", "truck", "stop sign"
 ]
 
 # --- Audio & Speech Recognition Engine Configuration ---
@@ -84,7 +87,11 @@ VAD_POST_ROLL = float(os.getenv("VAD_POST_ROLL", 0.2))                     # Đ�
 VAD_NOISE_MULTIPLIER = float(os.getenv("VAD_NOISE_MULTIPLIER", 4.5))       # Gấp 4.5 lần Noise Floor khi calibrate
 CALIBRATION_DURATION = float(os.getenv("CALIBRATION_DURATION", 1.0))       # Thời gian đo tiếng ồn ban đầu (giây)
 
-# --- Offline LLM (Ollama) & TTS Configuration ---
+# --- LLM API (ShopAIKey / Gemini Cloud + Ollama Offline Fallback) ---
+SHOPAIKEY_API_KEY = os.getenv("SHOPAIKEY_API_KEY", "sk-j7Oux1kadgbj4FF2oM2jXKyLsO8p3O6khSmFNMJh8LNgwxuI")
+SHOPAIKEY_BASE_URL = os.getenv("SHOPAIKEY_BASE_URL", "https://api.shopaikey.com/v1")
+SHOPAIKEY_MODEL = os.getenv("SHOPAIKEY_MODEL", "gpt-4o-mini")
+
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 ENABLE_LLM_CHAT = os.getenv("ENABLE_LLM_CHAT", "True").lower() in ("true", "1", "yes")

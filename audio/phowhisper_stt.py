@@ -446,8 +446,22 @@ class PhoWhisperSTT:
 
         clean_text = " ".join(final_words)
 
-        # 4. Chuẩn hóa viết hoa danh từ chuyên ngành robot mà không đổi nghĩa câu
+        # 4. Chuẩn hóa viết hoa & Sửa từ đồng âm phát âm sai (Phonetic Speech Normalization)
         domain_terms = {
+            # Từ gọi tên Robot & Từ đồng âm (Wake Words & Phonetic Corrections)
+            r"\b(kim\s*quỷ|kim\s*quỳ|kim\s*quái|kim\s*quy|kim\s*ky|kym\s*qui|kym\s*quy|chim\s*qui|chim\s*quy|kim\s*quê|kim\s*kui|kim\s*quý)\b": "Kim Qui",
+            r"\b(con\s*rùa|rùa\s*ơi|rùa\s*béo|rùa\s*nhỏ|rùa\s*con|rùa\s*robot|rùa\s*kim\s*qui)\b": "Rùa Kim Qui",
+
+            # Trường & Nhóm tác giả & Thầy Mentor
+            r"\b(đại\s*nam|đại\s*học\s*đại\s*nam|dhn)\b": "Đại học Đại Nam",
+            r"\b(ga\s*lac\s*ti\s*co|ga\s*lac\s*ti\s*cos|ga\s*lắc\s*ti\s*co|ga\s*lắc\s*ti\s*cos|galaxticos|ga\s*lắc\s*ti\s*cô)\b": "Galacticos",
+            r"\b(thế\s*phương\s*nam|phương\s*nam)\b": "Nguyễn Thế Phương Nam",
+            r"\b(hoàng\s*dương|nguyễn\s*hoàng\s*dương)\b": "Nguyễn Hoàng Dương",
+            r"\b(duy\s*a|lê\s*duy\s*a)\b": "Lê Duy A",
+            r"\b(duy\s*văn|đỗ\s*duy\s*văn)\b": "Đỗ Duy Văn",
+            r"\b(đỗ\s*quang\s*thơ|thầy\s*thơ|thầy\s*đỗ\s*quang\s*thơ)\b": "thầy Đỗ Quang Thơ",
+
+            # Thuật ngữ chuyên ngành robot
             r"\brobot\b": "robot",
             r"\braspberry\s+pi\b": "Raspberry Pi",
             r"\besp32\b": "ESP32",

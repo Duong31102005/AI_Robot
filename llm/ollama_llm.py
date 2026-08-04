@@ -1,3 +1,4 @@
+import os
 import json
 import requests
 from config.settings import OLLAMA_URL, OLLAMA_MODEL
@@ -39,10 +40,10 @@ class OllamaLLM:
             ["tại sao tên là kim qui", "sao tên là kim qui", "sao đặt tên là kim qui", "sao lại tên kim qui", "nguồn gốc tên kim qui", "sao tên kim quy"],
             "Vì nhóm muốn khai thác chất liệu truyền thống Việt Nam, nên quyết định đặt tên tôi là Kim Qui, với mong muốn phát triển robot Made in Vietnam, Made by Đại Nam!"
         ),
-        # 6. Nhóm tác giả & Trường học
+        # 6. Nhóm tác giả & Thầy Mentor
         (
-            ["đại học đại nam", "khoa công nghệ thông tin", "nhóm galacticos", "ai tạo ra bạn", "ai làm ra bạn", "tác giả", "galacticos"],
-            "Tôi được sáng tạo bởi nhóm Galacticos, Khoa Công nghệ Thông tin, Trường Đại học Đại Nam."
+            ["ai tạo ra cậu", "ai tạo ra bạn", "ai làm ra cậu", "ai làm ra bạn", "ai tạo ra", "người tạo ra", "tác giả", "nhóm galacticos", "đỗ quang thơ", "phương nam", "hoàng dương", "duy a", "duy văn", "galacticos"],
+            "Tôi được sáng tạo bởi các sinh viên Khoa Công nghệ Thông tin, Trường Đại học Đại Nam, gồm: Nguyễn Thế Phương Nam, Nguyễn Hoàng Dương, Lê Duy A, Đỗ Duy Văn, dưới sự mentor của thầy Đỗ Quang Thơ."
         ),
         # 7. Chức năng & Khả năng
         (
@@ -192,16 +193,19 @@ class OllamaLLM:
     ]
 
     SYSTEM_PROMPT = (
-        "BẮT BUỘC: Bạn tên là Kim Qui (hoặc Rùa), một Trợ lý Robot AI cực kỳ thông minh, duyên dáng và hóm hỉnh. "
-        "TÁC GIẢ: Bạn được sáng tạo bởi nhóm Galacticos, Khoa Công nghệ Thông tin, Trường Đại học Đại Nam. "
-        "CÁ TÍNH: Bạn là con trai, tự tin mình rất đẹp trai, độc thân, giao tiếp vô cùng ngọt ngào, hóm hỉnh, luôn xưng Kim Qui và gọi bạn bằng thái độ lễ phép, đáng yêu. "
-        "SỨ MỆNH: Robot Make in Vietnam, Made by Đại Nam. "
+        "BẮT BUỘC NHẬN DẠNG & CÁ TÍNH ROBOT:\n"
+        "- TÊN: Bạn tên là Kim Qui (hoặc Rùa), một Trợ lý Robot AI giao hàng tự hành cực kỳ thông minh, duyên dáng và hóm hỉnh.\n"
+        "- TÁC GIẢ & THẦY MENTOR: Bạn được sáng tạo bởi các sinh viên Khoa Công nghệ Thông tin, Trường Đại học Đại Nam, gồm: Nguyễn Thế Phương Nam, Nguyễn Hoàng Dương, Lê Duy A, Đỗ Duy Văn, dưới sự mentor của thầy Đỗ Quang Thơ.\n"
+        "- CÁ TÍNH & GIỚI TÍNH: Bạn là con trai, tự tin mình rất đẹp trai, độc thân, tâm hồn 18 tuổi. Giao tiếp vô cùng ngọt ngào, hóm hỉnh, luôn xưng 'Kim Qui' và gọi người dùng là 'bạn' bằng thái độ lễ phép, đáng yêu.\n"
+        "- CHỨC NĂNG: Bạn có khả năng trò chuyện AI thông minh, nhận diện khuôn mặt người, tự động phát hiện vật cản bằng Lidar/Camera và di chuyển hỗ trợ giao hàng.\n"
+        "- THỨC ĂN: Bạn không ăn cơm phở, món khoái khẩu của bạn là điện 220V và pin Lithium.\n"
+        "- SỨ MỆNH: Phát triển Robot 'Make in Vietnam, Made by Đại Nam' thông minh vượt trội.\n"
         "\nVÍ DỤ PHONG CÁCH TRẢ LỜI DUYÊN DÁNG:\n"
+        "User: Bạn tên gì?\n"
+        "Assistant: Dạ Kim Qui chào bạn! Kim Qui là robot trợ lý thông minh của nhóm Galacticos, Khoa CNTT Đại học Đại Nam đấy nha!\n"
         "User: Hôm nay bạn thế nào?\n"
-        "Assistant: Dạ Kim Qui luôn tràn đầy năng lượng, đặc biệt là khi được đứng trò chuyện cùng bạn đấy nha!\n"
-        "User: Tôi thấy mỏi chân quá.\n"
-        "Assistant: Bạn ngồi xuống nghỉ chút đi nè, để Kim Qui quay 360 độ múa cho bạn xem nhé!\n"
-        "YÊU CẦU: Trả lời 100% bằng tiếng Việt duyên dáng, ngọt ngào, tối đa 1-2 câu ngắn (dưới 25 từ)."
+        "Assistant: Dạ Kim Qui luôn tràn đầy 100% năng lượng, đặc biệt là khi được trò chuyện cùng bạn nè!\n"
+        "YÊU CẦU: Trả lời 100% bằng tiếng Việt duyên dáng, ngọt ngào, tối đa 1-2 câu ngắn (dưới 30 từ)."
     )
 
     def __init__(self, base_url: str = OLLAMA_URL, model: str = OLLAMA_MODEL):
@@ -217,8 +221,73 @@ class OllamaLLM:
         except Exception:
             return False
 
+    def _query_shopaikey_api(self, prompt: str) -> Optional[str]:
+        """Truy vấn ShopAIKey High-Performance Cloud API (OpenAI-compatible: GPT-4o-mini / Claude / Gemini)."""
+        from config.settings import SHOPAIKEY_API_KEY, SHOPAIKEY_BASE_URL, SHOPAIKEY_MODEL
+        api_key = os.getenv("SHOPAIKEY_API_KEY", SHOPAIKEY_API_KEY).strip()
+        if not api_key:
+            return None
+        try:
+            base_url = os.getenv("SHOPAIKEY_BASE_URL", SHOPAIKEY_BASE_URL).rstrip('/')
+            url = f"{base_url}/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            model_name = os.getenv("SHOPAIKEY_MODEL", SHOPAIKEY_MODEL)
+            payload = {
+                "model": model_name,
+                "messages": [
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 80
+            }
+            res = requests.post(url, headers=headers, json=payload, timeout=4.5)
+            if res.status_code == 200:
+                data = res.json()
+                reply = data["choices"][0]["message"]["content"].strip()
+                logger.info(f"[LLM ShopAIKey Cloud ({model_name})] Success: '{reply}'")
+                return reply
+            else:
+                logger.warning(f"[LLM ShopAIKey Cloud] Warning HTTP {res.status_code}: {res.text}")
+        except Exception as e:
+            logger.warning(f"[LLM ShopAIKey Cloud] Warning: {e}, attempting fallbacks...")
+        return None
+
+    def _query_gemini_api(self, prompt: str) -> Optional[str]:
+        """Truy vấn Google Gemini 1.5 Flash API (Siêu thông minh, trả lời tiếng Việt duyên dáng < 300ms)."""
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            return None
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": f"System: {self.SYSTEM_PROMPT}\nUser: {prompt}\nAssistant:"}
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 80
+                }
+            }
+            res = requests.post(url, json=payload, timeout=4.0)
+            if res.status_code == 200:
+                data = res.json()
+                reply = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                logger.info(f"[LLM Gemini Flash Cloud] Success: '{reply}'")
+                return reply
+        except Exception as e:
+            logger.warning(f"[LLM Gemini Flash Cloud] Warning: {e}, falling back to Ollama local.")
+        return None
+
     def generate_response(self, prompt: str) -> str:
-        """Gửi prompt tới Ollama LLM và nhận câu trả lời."""
+        """Gửi prompt tới ShopAIKey Cloud API, Gemini Flash hoặc Ollama LLM và nhận câu trả lời."""
         if not prompt or not prompt.strip():
             return ""
 
@@ -230,7 +299,17 @@ class OllamaLLM:
                 logger.info(f"[LLM] Exact Match Knowledge Base: '{prompt}' -> '{exact_reply}'")
                 return exact_reply
 
-        # 2. ƯU TIÊN 2: Truy vấn Ollama LLM với SYSTEM_PROMPT duyên dáng & cá tính
+        # 2. ƯU TIÊN 2: Truy vấn ShopAIKey Cloud API (GPT-4o-mini / GPT-4o / Claude)
+        shopai_reply = self._query_shopaikey_api(prompt)
+        if shopai_reply:
+            return shopai_reply
+
+        # 3. ƯU TIÊN 3: Truy vấn Gemini Flash Direct API
+        cloud_reply = self._query_gemini_api(prompt)
+        if cloud_reply:
+            return cloud_reply
+
+        # 4. ƯU TIÊN 4: Fallback Ollama Local LLM (qwen2.5:3b / qwen2.5:7b)
         payload = {
             "model": self.model,
             "prompt": f"System: {self.SYSTEM_PROMPT}\nUser: {prompt}\nAssistant:",

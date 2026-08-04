@@ -121,6 +121,12 @@ class PiClient:
                 "reply": reply,
                 "mission_id": mission_id
             }
+            # Đồng thời lưu lịch sử hội thoại vào Web Database (Port 8000)
+            try:
+                requests.post("http://localhost:8000/api/v1/robot/conversation", json={"prompt": prompt, "reply": reply}, timeout=1.0)
+            except Exception:
+                pass
+
             response = requests.post(
                 conversation_url,
                 json={"text": json.dumps(payload)},
@@ -132,11 +138,17 @@ class PiClient:
             return False
 
     def send_detections(self, detections: list, timeout: float = 1.0) -> bool:
-        """Gửi danh sách vật thể YOLO nhận dạng được lên HTTP bridge của Pi (port 8001)."""
+        """Gửi danh sách vật thể YOLO nhận dạng được lên Web Dashboard (port 8000) & HTTP bridge của Pi (port 8001)."""
         if not detections:
             return False
         if self.dry_run:
             return True
+
+        # Gửi danh sách vật thể nhận diện trực tiếp tới Web Backend
+        try:
+            requests.post("http://localhost:8000/api/v1/robot/detections", json={"detections": detections}, timeout=0.5)
+        except Exception:
+            pass
 
         import json
         detection_url = self.url.replace("/command", "/detection")

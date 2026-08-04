@@ -105,9 +105,24 @@ class YOLOPersonDetector:
                     cx = x1 + w // 2
                     cy = y1 + h // 2
 
+                    vi_map = {
+                        "person": "Người", "chair": "Ghế", "couch": "Sofa", "dining table": "Bàn ăn",
+                        "potted plant": "Chậu cây", "tv": "Tivi/Màn hình", "laptop": "Máy tính",
+                        "mouse": "Chuột MT", "keyboard": "Bàn phím", "cell phone": "Điện thoại",
+                        "remote": "Điều khiển", "clock": "Đồng hồ", "bottle": "Chai nước",
+                        "cup": "Cốc/Ly", "wine glass": "Ly rượu", "bowl": "Bát/Tô",
+                        "apple": "Quả táo", "sandwich": "Bánh mì", "backpack": "Balo",
+                        "handbag": "Túi xách", "suitcase": "Vali", "umbrella": "Chiếc ô",
+                        "bench": "Ghế dài", "car": "Ô tô", "motorcycle": "Xe máy",
+                        "bicycle": "Xe đạp", "bus": "Xe buýt", "truck": "Xe tải",
+                        "stop sign": "Biển dừng", "dog": "Con chó", "cat": "Con mèo", "bed": "Giường"
+                    }
+                    label_vi = vi_map.get(class_name.lower().strip(), class_name)
+
                     det = {
                         "class_id": cls_id,
                         "class_name": class_name,
+                        "label_vi": label_vi,
                         "confidence": round(conf, 4),
                         "x1": x1,
                         "y1": y1,
