@@ -46,8 +46,26 @@ class PiClient:
         if not text:
             return False
 
+        # Chuẩn hóa câu lệnh tiếng Việt sang mã lệnh động cơ ESP32 chuẩn (tien 150, dung, etc.)
+        cmd_lower = text.strip().lower()
+        mapping = {
+            "đi thẳng": "tien 150",
+            "đi lùi": "lui 150",
+            "rẽ trái": "trai 150",
+            "rẽ phải": "phai 150",
+            "xoay trái": "xoay_trai 150",
+            "xoay phải": "xoay_phai 150",
+            "chéo trái": "cheo_tt 150",
+            "chéo phải": "cheo_tp 150",
+            "lùi chéo trái": "cheo_st 150",
+            "lùi chéo phải": "cheo_sp 150",
+            "dừng": "dung",
+            "dừng lại": "dung"
+        }
+        send_text = mapping.get(cmd_lower, text)
+
         if self.dry_run:
-            logger.info(f"[PI] [DRY_RUN] Command simulated: '{text}' -> {self.url}")
+            logger.info(f"[PI] [DRY_RUN] Command simulated: '{send_text}' -> {self.url}")
             return True
 
         import time
@@ -58,13 +76,13 @@ class PiClient:
         try:
             response = requests.post(
                 self.url,
-                json={"text": text},
+                json={"text": send_text},
                 timeout=timeout
             )
             is_ok = (response.status_code == 200)
             self.last_connected_status = is_ok
             if is_ok:
-                logger.info(f"[PI] Command sent successfully: '{text}' (HTTP 200)")
+                logger.info(f"[PI] Command sent successfully: '{send_text}' (HTTP 200)")
             else:
                 logger.warning(f"[PI] Send failed HTTP {response.status_code}: {response.text}")
             return is_ok
