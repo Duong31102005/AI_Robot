@@ -23,8 +23,15 @@ from utils.logger import get_logger
 logger = get_logger("MainSTT")
 
 WAKE_KEYWORDS = [
+    # Từ khóa yêu cầu mới (kim, quy, kim quy, kim quy ơi, nay kim quy...)
+    "kim", "quy", "qui", "quý",
+    "kim quy", "kim qui", "kim quý",
+    "kim quy ơi", "kim qui ơi", "kim quý ơi",
+    "nay kim quy", "này kim quy", "nay kim qui", "này kim qui", "nay kim quý", "này kim quý",
+
+    # Các từ khóa cũ của hệ thống
     "rùa", "rùa ơi", "ơi rùa", "con rùa", "robot rùa", "bạn rùa", "chú rùa",
-    "kim qui", "kim quy", "kim quý", "kim qui ơi", "ơi kim qui",
+    "ơi kim qui", "ơi kim quy",
     "minh quý", "nguyễn minh quý", "kỳ quý", "kín quý", "chim quý",
     "phương nam", "phương nam ơi", "ơi phương nam", "robot phương nam"
 ]

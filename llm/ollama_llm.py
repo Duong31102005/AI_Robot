@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+from typing import Optional
 from config.settings import OLLAMA_URL, OLLAMA_MODEL
 from utils.logger import get_logger
 
@@ -214,7 +215,15 @@ class OllamaLLM:
         self.model = model
 
     def is_available(self) -> bool:
-        """Kiểm tra Ollama Server có đang chạy không."""
+        """Kiểm tra Ollama Server có đang chạy hoặc Cloud API có khả dụng không."""
+        # 1. Kiểm tra ShopAIKey hoặc Gemini Cloud API
+        from config.settings import SHOPAIKEY_API_KEY
+        api_key = os.getenv("SHOPAIKEY_API_KEY", SHOPAIKEY_API_KEY).strip()
+        gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if api_key or gemini_key:
+            return True
+
+        # 2. Kiểm tra Ollama local
         try:
             res = requests.get(f"{self.base_url}/api/tags", timeout=1.5)
             return res.status_code == 200

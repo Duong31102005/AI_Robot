@@ -10,7 +10,7 @@ import json
 import asyncio
 import threading
 import time
-from typing import Set
+from typing import Set, Optional
 
 from utils.logger import get_logger
 
