@@ -25,7 +25,7 @@ logger = get_logger("MainSTT")
 WAKE_KEYWORDS = [
     "kim", "quy", "qui", "kìm", "quỳ", "quý",
     "rùa", "rùa ơi", "ơi rùa", "con rùa", "robot rùa", "bạn rùa", "chú rùa",
-    "kim qui", "kim quy", "kim quý", "kim qui ơi", "ơi kim qui",
+    "ơi kim qui", "ơi kim quy",
     "minh quý", "nguyễn minh quý", "kỳ quý", "kín quý", "chim quý",
     "phương nam", "phương nam ơi", "ơi phương nam", "robot phương nam",
     "rẽ", "rẽ lên", "rẽ trái", "rẽ phải", "đi", "đi thẳng", "tiến", "lùi", "dừng", "dừng lại", "xoay", "quẹo", "chào"

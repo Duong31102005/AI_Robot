@@ -87,14 +87,13 @@ VAD_POST_ROLL = float(os.getenv("VAD_POST_ROLL", 0.2))                     # Đ�
 VAD_NOISE_MULTIPLIER = float(os.getenv("VAD_NOISE_MULTIPLIER", 3.5))       # Gấp 3.5 lần Noise Floor khi calibrate
 CALIBRATION_DURATION = float(os.getenv("CALIBRATION_DURATION", 1.0))       # Thời gian đo tiếng ồn ban đầu (giây)
 
-# --- LLM API (ShopAIKey / Gemini Cloud + Ollama Offline Fallback) ---
-SHOPAIKEY_API_KEY = os.getenv("SHOPAIKEY_API_KEY", "sk-j7Oux1kadgbj4FF2oM2jXKyLsO8p3O6khSmFNMJh8LNgwxuI")
-SHOPAIKEY_BASE_URL = os.getenv("SHOPAIKEY_BASE_URL", "https://api.shopaikey.com/v1")
-SHOPAIKEY_MODEL = os.getenv("SHOPAIKEY_MODEL", "gpt-4o-mini")
-
+# --- Offline LLM (Ollama) & TTS Configuration ---
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 ENABLE_LLM_CHAT = os.getenv("ENABLE_LLM_CHAT", "True").lower() in ("true", "1", "yes")
 ENABLE_TTS_SPEAKER = os.getenv("ENABLE_TTS_SPEAKER", "True").lower() in ("true", "1", "yes")
 
-
+# --- ShopAIKey Cloud LLM Configuration ---
+SHOPAIKEY_API_KEY = os.getenv("SHOPAIKEY_API_KEY", "sk-j7Oux1kadgbj4FF2oM2jXKyLsO8p3O6khSmFNMJh8LNgwxuI")
+SHOPAIKEY_BASE_URL = os.getenv("SHOPAIKEY_BASE_URL", "https://api.shopaikey.com/v1")
+SHOPAIKEY_MODEL = os.getenv("SHOPAIKEY_MODEL", "gpt-4o-mini")
