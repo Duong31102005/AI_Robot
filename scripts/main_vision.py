@@ -103,6 +103,13 @@ def main():
                 logger.info(f"😊 [FACE GREETING] Chào khách hàng: '{face_greeting}'")
                 threading.Thread(target=pi_client.send_tts, args=(face_greeting,), daemon=True).start()
 
+            # d. Nhận diện Cửa đóng / Thang Máy & Tự Động Dừng Xe + Phát Loa Nhờ Giúp Đỡ
+            assist_text = vision_intelligence.detect_door_or_elevator_and_assist(frame, detections)
+            if assist_text:
+                logger.info(f"🚪 [DOOR/ELEVATOR ASSISTANCE] Dừng xe & phát loa: '{assist_text}'")
+                threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
+                threading.Thread(target=pi_client.send_tts, args=(assist_text,), daemon=True).start()
+
             # 4. Logic Robot Giao Hàng & Bộ Lọc Cảnh Báo Vật Cản Duy Trì 2.5 Giây (2.5s Persistence Obstacle Filter):
             delivery_status = "DANG_DI_CHUYEN_GIAO_HANG"
             if target is not None:

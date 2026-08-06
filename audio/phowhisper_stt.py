@@ -257,17 +257,19 @@ class PhoWhisperSTT:
                 segments, info = self.model.transcribe(
                     audio_dsp,
                     language="vi",
+                    task="transcribe",
                     beam_size=STT_BEAM_SIZE,
                     best_of=STT_BEST_OF,
                     temperature=0.0,
                     patience=STT_PATIENCE,
                     condition_on_previous_text=False,
-                    initial_prompt="",
+                    initial_prompt="Robot Kim Qui, Rùa Kim Qui, Đại học Đại Nam, Galacticos, đi thẳng, lùi, rẽ trái, rẽ phải, dừng lại, tên là gì, bạn ăn cái gì",
                     no_repeat_ngram_size=3,
                     repetition_penalty=1.2,
                     compression_ratio_threshold=2.0,
                     log_prob_threshold=-0.5,
                     no_speech_threshold=0.35,
+                    suppress_blank=True,
                     vad_filter=True
                 )
                 if hasattr(info, 'no_speech_prob') and info.no_speech_prob > 0.35:
@@ -292,11 +294,11 @@ class PhoWhisperSTT:
         self.last_postprocess_time_ms = (time.perf_counter() - post_start) * 1000.0
 
         # Ngưỡng tin cậy linh hoạt (Adaptive Confidence Threshold):
-        # - Cho phép từ khóa gọi robot "Kim Qui", "Rùa", "Galacticos" vượt qua khi confidence >= 0.45 (vì từ ngắn Whisper thường tính score ~0.50-0.60).
+        # - Cho phép từ khóa gọi robot "Kim Qui", "Rùa", "Galacticos" vượt qua khi confidence >= 0.40 (vì từ ngắn Whisper thường tính score ~0.50-0.60).
         # - Các câu nói thường hoặc nhiễu âm thanh cần confidence >= 0.68 để tránh ảo giác.
-        wake_terms = ["kim qui", "rùa", "galacticos", "đại nam", "phương nam", "hoàng dương", "duy a", "duy văn", "thầy thơ"]
+        wake_terms = ["kim qui", "rùa", "galacticos", "đại nam", "phương nam", "hoàng dương", "duy a", "duy văn", "thầy thơ", "rover", "rúa", "ro hoa", "parker", "phở", "kìm nguội"]
         has_wake_term = any(w in clean_text.lower() for w in wake_terms)
-        min_conf = 0.45 if has_wake_term else 0.68
+        min_conf = 0.40 if has_wake_term else 0.65
 
         if self.last_confidence < min_conf:
             logger.warning(f"[PhoWhisperSTT] ⚠️ Bỏ qua kết quả do độ tin cậy thấp ({self.last_confidence:.2f} < {min_conf:.2f}): '{clean_text}'")
@@ -471,8 +473,8 @@ class PhoWhisperSTT:
         # 4. Chuẩn hóa viết hoa & Sửa từ đồng âm phát âm sai (Phonetic Speech Normalization)
         domain_terms = {
             # Từ gọi tên Robot & Từ đồng âm (Wake Words & Phonetic Corrections)
-            r"\b(kim\s*quỷ|kim\s*quỳ|kim\s*quái|kim\s*quy|kim\s*ky|kym\s*qui|kym\s*quy|chim\s*qui|chim\s*quy|kim\s*quê|kim\s*kui|kim\s*quý)\b": "Kim Qui",
-            r"\b(con\s*rùa|rùa\s*ơi|rùa\s*béo|rùa\s*nhỏ|rùa\s*con|rùa\s*robot|rùa\s*kim\s*qui)\b": "Rùa Kim Qui",
+            r"\b(kim\s*quỷ|kim\s*quỳ|kim\s*quái|kim\s*ky|kym\s*qui|kym\s*quy|chim\s*qui|chim\s*quy|kim\s*quê|kim\s*kui|kim\s*quý|kìm\s*nguội|parker)\b": "Kim Qui",
+            r"\b(rover|rúa|ro\s*hoa|rover\s*phở|ro\s*hoa\s*phở|rúa\s*hoa)\b": "Rùa",
 
             # Trường & Nhóm tác giả & Thầy Mentor
             r"\b(đại\s*nam|đại\s*học\s*đại\s*nam|dhn)\b": "Đại học Đại Nam",

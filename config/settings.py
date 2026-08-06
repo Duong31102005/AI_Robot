@@ -2,7 +2,7 @@ import os
 
 # --- Raspberry Pi Server Configuration ---
 PI_IP = os.getenv("PI_IP", "192.168.61.135")
-PI_PORT = int(os.getenv("PI_PORT", 8001))
+PI_PORT = int(os.getenv("PI_PORT", 8000))
 PI_COMMAND_URL = f"http://{PI_IP}:{PI_PORT}/command"
 
 # --- Movement & Safety Configuration ---
@@ -55,7 +55,7 @@ AUDIO_OUTPUT_PATH = "input.wav"
 LANGUAGE = "vi"
 
 # Engine selection: PhoWhisper Large (VinAI PhoWhisper-large CTranslate2)
-STT_ENGINE = os.getenv("STT_ENGINE", "phowhisper").lower()
+STT_ENGINE = os.getenv("STT_ENGINE", "parakeet").lower()
 STT_VAD = os.getenv("STT_VAD", "silero").lower()  # "silero" (mặc định cho độ chính xác cao) hoặc "webrtc"
 STT_USE_GPU = os.getenv("STT_USE_GPU", "True").lower() in ("true", "1", "yes")
 STT_CPU_THREADS = int(os.getenv("STT_CPU_THREADS", 4))

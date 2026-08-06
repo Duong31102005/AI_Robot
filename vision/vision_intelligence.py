@@ -241,7 +241,59 @@ class VisionIntelligence:
 
         return debug_frame
 
-    # --- 5. SCENE ENCODER FOR VLM ---
+    # --- 6. DOOR & ELEVATOR ASSISTANCE (Nhận diện cửa/thang máy & Nhờ mở cửa phát loa) ---
+    def detect_door_or_elevator_and_assist(self, frame: np.ndarray, detections: List[Dict[str, Any]] = None) -> Optional[str]:
+        """
+        Nhận diện Cửa đóng / Cửa Thang máy đứng chặn trước mặt Robot.
+        Tự động dừng xe và trả về câu xin trợ giúp để phát loa Kim Qui (Cooldown 20s).
+        """
+        if frame is None:
+            return None
+        now = time.time()
+        if hasattr(self, 'last_assist_time') and (now - self.last_assist_time < 20.0):
+            return None
+
+        h, w = frame.shape[:2]
+        is_elevator = False
+        is_door = False
+
+        # 1. Quét danh sách vật thể từ YOLO (nếu có nhãn door / elevator)
+        if detections:
+            for det in detections:
+                label = det.get("label", "").lower()
+                if any(kw in label for kw in ["elevator", "lift", "thang máy"]):
+                    is_elevator = True
+                    break
+                elif any(kw in label for kw in ["door", "gate", "cửa"]):
+                    is_door = True
+                    break
+
+        # 2. Nếu không có nhãn YOLO, soi ma trận bức tường chắn ngang sát mặt camera (>80% chiều cao frame)
+        if not is_elevator and not is_door:
+            # Soi vùng trung tâm camera xem có mảng vật cản lớn phẳng chắn ngang mặt (Cửa phòng / Cửa thang đóng)
+            center_crop = frame[int(h*0.2):int(h*0.8), int(w*0.25):int(w*0.75)]
+            gray = cv2.cvtColor(center_crop, cv2.COLOR_BGR2GRAY)
+            variance = np.var(gray)
+            # Mảng tường/cửa phẳng có variance cấu trúc phẳng và kích thước chắn ngang
+            if variance < 800 and center_crop.shape[0] > (h * 0.5):
+                is_door = True
+
+        if is_elevator:
+            self.last_assist_time = now
+            self.current_expression = "(ʘoʘ) ELEVATOR"
+            self.expression_color = (0, 255, 255)
+            logger.info("🛗 [ASSISTANCE] Phát hiện Thang Máy! Kích hoạt loa xin bấm thang...")
+            return "Dạ, Kim Qui xin chào! Kim Qui đang đứng chờ thang máy, nhờ bạn tốt bụng bấm nút thang giúp Kim Qui lên tầng với ạ! Kim Qui xin cảm ơn nhiều!"
+        elif is_door:
+            self.last_assist_time = now
+            self.current_expression = "(◕_◕) DOOR CLOSED"
+            self.expression_color = (0, 255, 255)
+            logger.info("🚪 [ASSISTANCE] Phát hiện Cửa đóng! Kích hoạt loa xin mở cửa...")
+            return "Dạ, Kim Qui xin chào! Phía trước cửa đang đóng, nhờ bạn tốt bụng mở cửa giúp Kim Qui để Kim Qui đi qua với ạ! Kim Qui xin cảm ơn nhiều!"
+
+        return None
+
+    # --- 7. SCENE ENCODER FOR VLM ---
     @staticmethod
     def encode_frame_to_base64(frame: np.ndarray, quality: int = 75) -> Optional[str]:
         """Mã hóa khung hình OpenCV BGR thành chuỗi Base64 JPEG để gửi lên Vision Cloud AI."""

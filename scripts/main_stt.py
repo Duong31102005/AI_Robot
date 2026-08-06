@@ -6,13 +6,18 @@ import threading
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from audio.phowhisper_stt import PhoWhisperSTT as WhisperStreamingSTT
+from config.settings import STT_ENGINE, ENABLE_LLM_CHAT, ENABLE_TTS_SPEAKER
+
+if STT_ENGINE == "parakeet":
+    from audio.parakeet_stt import ParakeetSTT as WhisperStreamingSTT
+else:
+    from audio.phowhisper_stt import PhoWhisperSTT as WhisperStreamingSTT
+
 from api.stt_websocket import broadcast_stt_event
 from audio.tts_engine import TTSEngine
 from llm.ollama_llm import OllamaLLM
 from communication.pi_client import PiClient
 from utils.command_normalizer import CommandNormalizer
-from config.settings import ENABLE_LLM_CHAT, ENABLE_TTS_SPEAKER
 from utils.logger import get_logger
 
 logger = get_logger("MainSTT")
@@ -28,8 +33,7 @@ WAKE_KEYWORDS = [
 def parse_wake_word(text: str) -> tuple[bool, str]:
     """
     Kiểm tra Từ khóa kích hoạt 'Kim Qui'.
-    Nếu có từ khóa 'Kim Qui', trả về (True, câu_hỏi_đã_lọc).
-    Nếu không có từ khóa, trả về (False, text).
+    Nếu có từ khóa 'Kim Qui', giữ NGUYÊN BẢN 100% toàn bộ câu nói của người dùng.
     """
     text_lower = text.lower().strip()
 
@@ -39,11 +43,9 @@ def parse_wake_word(text: str) -> tuple[bool, str]:
 
     for wake in WAKE_KEYWORDS:
         if wake in text_lower:
-            cleaned = re.sub(re.escape(wake), '', text_lower, flags=re.IGNORECASE).strip()
-            cleaned = re.sub(r'^(ơi|hãy|làm ơn|bạn|giúp)\s*', '', cleaned).strip()
-            return True, cleaned
+            return True, text.strip()
 
-    return False, text
+    return False, text.strip()
 
 
 def main():

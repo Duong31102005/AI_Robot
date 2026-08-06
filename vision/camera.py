@@ -94,18 +94,18 @@ class Camera:
                         break
                     buffer += chunk
 
-                    # Tìm mốc bắt đầu (0xffd8) và kết thúc (0xffd9) của khung hình JPEG
-                    start = buffer.find(b'\xff\xd8')
-                    end = buffer.find(b'\xff\xd9', start + 2) if start != -1 else -1
-
-                    if start != -1 and end != -1:
-                        jpg = buffer[start:end+2]
-                        buffer = buffer[end+2:]
-                        frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
-                        if frame is not None:
-                            with self._lock:
-                                self._latest_frame = frame
-                    elif len(buffer) > 500000:
+                    # Tìm mốc bắt đầu (0xffd8) và kết thúc (0xffd9) của khung hình JPEG MỚI NHẤT (Reverse Find - 0ms Latency)
+                    end = buffer.rfind(b'\xff\xd9')
+                    if end != -1:
+                        start = buffer.rfind(b'\xff\xd8', 0, end)
+                        if start != -1:
+                            jpg = buffer[start:end+2]
+                            buffer = buffer[end+2:]
+                            frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                            if frame is not None:
+                                with self._lock:
+                                    self._latest_frame = frame
+                    elif len(buffer) > 200000:
                         buffer = b''
             except Exception:
                 time.sleep(0.3)
