@@ -41,37 +41,62 @@ def main():
     prev_time = time.time()
     last_send_time = 0.0
     last_tts_warn_time = 0.0
+    last_follow_time = 0.0
+    last_follow_cmd = ""
     obstacle_start_time = 0.0
     last_sent_status = ""
     fps = 0.0
     frame_count = 0
     cached_detections = []
     cached_target = None
+    ai_lock = threading.Lock()
+    latest_frame_for_ai = None
+
+    def ai_inference_worker():
+        nonlocal cached_detections, cached_target, latest_frame_for_ai
+        while True:
+            frame_to_process = None
+            with ai_lock:
+                if latest_frame_for_ai is not None:
+                    frame_to_process = latest_frame_for_ai.copy()
+                    latest_frame_for_ai = None
+
+            if frame_to_process is not None:
+                try:
+                    dets = detector.detect(frame_to_process)
+                    tgt = select_target(dets)
+                    with ai_lock:
+                        cached_detections = dets
+                        cached_target = tgt
+                except Exception:
+                    pass
+            else:
+                time.sleep(0.01)
+
+    threading.Thread(target=ai_inference_worker, daemon=True).start()
 
     try:
         while True:
             ret, frame = camera.read_frame()
             if not ret or frame is None:
-                time.sleep(0.02)
+                time.sleep(0.01)
                 continue
 
             h, w = frame.shape[:2]
             frame_count += 1
 
-            # Tính toán FPS
+            # Nạp khung hình mới nhất cho luồng AI chạy nền
+            with ai_lock:
+                latest_frame_for_ai = frame.copy()
+                detections = list(cached_detections)
+                target = cached_target
+
+            # Tính toán FPS hiển thị chuẩn
             curr_time = time.time()
             time_diff = curr_time - prev_time
             if time_diff > 0:
                 fps = 1.0 / time_diff
             prev_time = curr_time
-
-            # 3. Chạy AI YOLO11s nhận diện đối tượng & chướng ngại vật (Chạy mỗi 2 frame để mượt 40+ FPS)
-            if frame_count % 2 == 0 or not cached_detections:
-                cached_detections = detector.detect(frame)
-                cached_target = select_target(cached_detections)
-
-            detections = cached_detections
-            target = cached_target
 
             # Gửi danh sách vật thể YOLO nhận dạng được lên Web/Pi (Mỗi 1.5s để tránh nghẽn mạng)
             if detections and (curr_time - last_send_time) >= 1.5:
@@ -103,20 +128,101 @@ def main():
                 logger.info(f"😊 [FACE GREETING] Chào khách hàng: '{face_greeting}'")
                 threading.Thread(target=pi_client.send_tts, args=(face_greeting,), daemon=True).start()
 
-            # d. Nhận diện Cửa đóng / Thang Máy & Tự Động Dừng Xe + Phát Loa Nhờ Giúp Đỡ
-            assist_text = vision_intelligence.detect_door_or_elevator_and_assist(frame, detections)
+            # d. Nhận diện Cửa đóng / Thang Máy / Vật cản (Người, Ghế, Bàn...) & Tự Động Dừng Xe + Phát Loa Trợ Giúp
+            assist_text = vision_intelligence.detect_door_or_elevator_and_assist(frame, detections, target=target)
             if assist_text:
-                logger.info(f"🚪 [DOOR/ELEVATOR ASSISTANCE] Dừng xe & phát loa: '{assist_text}'")
+                logger.info(f"🚪 [VISION ASSISTANCE] Dừng xe & phát loa trợ giúp: '{assist_text}'")
                 threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
                 threading.Thread(target=pi_client.send_tts, args=(assist_text,), daemon=True).start()
 
-            # 4. Logic Robot Giao Hàng & Bộ Lọc Cảnh Báo Vật Cản Duy Trì 2.5 Giây (2.5s Persistence Obstacle Filter):
+            # 4. THUẬT TOÁN ĐIỀU KHIỂN ROBOT BÁM THEO NGƯỜI CHẬM & CHỈ KHI BẤM CHỌN MODE "FOLLOW_PERSON"
             delivery_status = "DANG_DI_CHUYEN_GIAO_HANG"
+            current_robot_mode = pi_client.get_current_mode() if (curr_time - last_follow_time) >= 0.25 else "MANUAL"
+
             if target is not None:
                 error_x, pos = calculate_person_position(target, w)
                 height_ratio = target["height"] / float(h)
 
-                # Vật cản phải chiếm > 85% chiều cao (< 40cm sát mặt camera), đúng trung tâm và CHẮN LIÊN TỤC TRÊN 2.5 GIÂY!
+                # CHỈ KÍCH HOẠT DI CHUYỂN BÁM NGƯỜI KHI NGƯỜI DÙNG BẤM CHỌN CHẾ ĐỘ BÁM NGƯỜI (FOLLOW_PERSON)!
+                if current_robot_mode in ["FOLLOW_PERSON", "FOLLOW_TARGET"]:
+                    if (curr_time - last_follow_time) >= 0.25:
+                        last_follow_time = curr_time
+                        follow_cmd = "dung"
+
+                        # Dynamic Turn & Distance Controller (Fully Unlocked Speed Scaling)
+                        abs_err_x = abs(error_x)
+
+                        # 1. Angular Speed Scaling
+                        ang_spd = 0
+                        if abs_err_x < 0.08:
+                            ang_spd = 0   # Steering Deadband (No jitter, 0 angular)
+                        elif abs_err_x < 0.25:
+                            ang_spd = 45  # Chậm mượt
+                        elif abs_err_x < 0.50:
+                            ang_spd = 85  # Vừa
+                        else:
+                            ang_spd = 120 # Turn Speed = 120
+
+                        # 2. Linear Speed Ramp Down
+                        lin_spd = 0
+                        is_too_close = False
+                        if height_ratio < 0.20:        # Distance > 2.5m
+                            lin_spd = 180
+                        elif height_ratio < 0.26:      # Distance 2.0m ~ 2.5m
+                            lin_spd = 140
+                        elif height_ratio < 0.34:      # Distance 1.5m ~ 2.0m
+                            lin_spd = 100
+                        elif height_ratio < 0.42:      # Distance 1.2m ~ 1.5m
+                            lin_spd = 60
+                        elif height_ratio <= 0.82:     # Distance 0.8m ~ 1.2m (Target Deadband: Stand Still)
+                            lin_spd = 0
+                        elif height_ratio <= 0.92:     # Distance 0.6m ~ 0.8m (Backward)
+                            lin_spd = 80
+                        else:                          # Distance < 0.6m (Hard Safety Stop)
+                            lin_spd = 0
+                            is_too_close = True
+
+                        is_left = error_x < -0.08
+                        is_right = error_x > 0.08
+                        is_large_angle = abs_err_x > 0.35  # Angle deviation > 0.35
+
+                        # Priority 1: Distance < 0.6m -> HARD SAFETY STOP
+                        if is_too_close:
+                            follow_cmd = "dung"
+                        # Priority 2: Large Angle Deviation (|error| > 0.35) -> ONLY ROTATE IN PLACE
+                        elif is_large_angle:
+                            follow_cmd = f"trai {ang_spd}" if is_left else f"phai {ang_spd}"
+                        else:
+                            # Priority 3: Aligned Motion
+                            if height_ratio < 0.42:    # Forward
+                                if is_left:
+                                    follow_cmd = f"cheo_tt {max(lin_spd, ang_spd)}"
+                                elif is_right:
+                                    follow_cmd = f"cheo_tp {max(lin_spd, ang_spd)}"
+                                else:
+                                    follow_cmd = f"tien {lin_spd}"
+                            elif height_ratio > 0.82:  # Backward + Steering
+                                if is_left:
+                                    follow_cmd = f"cheo_st {max(lin_spd, ang_spd)}"
+                                elif is_right:
+                                    follow_cmd = f"cheo_sp {max(lin_spd, ang_spd)}"
+                                else:
+                                    follow_cmd = f"lui {lin_spd}"
+                            else:
+                                # Target Deadband 0.8m ~ 1.2m: Hold distance, rotate in place if off-center
+                                if is_left:
+                                    follow_cmd = f"trai {ang_spd}"
+                                elif is_right:
+                                    follow_cmd = f"phai {ang_spd}"
+                                else:
+                                    follow_cmd = "dung"
+
+                        if follow_cmd != last_follow_cmd:
+                            last_follow_cmd = follow_cmd
+                            logger.info(f"👤 [PERSON FOLLOW SLOW] Mode: {current_robot_mode} | Target: {pos} (h_ratio: {height_ratio:.2f}) -> Lệnh: {follow_cmd}")
+                            threading.Thread(target=pi_client.send_command, args=(follow_cmd,), daemon=True).start()
+
+                # Kiểm tra vật cản chắn mặt gần > 85% chiều cao liên tục 2.5s
                 if height_ratio >= 0.85 and abs(error_x) <= 0.30:
                     if obstacle_start_time == 0.0:
                         obstacle_start_time = curr_time
@@ -124,6 +230,14 @@ def main():
                         delivery_status = "CANH_BAO_VAT_CAN_GAN"
                 else:
                     obstacle_start_time = 0.0
+            else:
+                # Không thấy người mục tiêu trong > 1.0s -> Dừng xe an toàn
+                if (curr_time - last_follow_time) >= 1.0 and last_follow_cmd != "dung":
+                    last_follow_cmd = "dung"
+                    last_follow_time = curr_time
+                    if current_robot_mode in ["FOLLOW_PERSON", "FOLLOW_TARGET"]:
+                        logger.info("👤 [PERSON FOLLOW] Mất mục tiêu -> Dừng xe an toàn")
+                        threading.Thread(target=pi_client.send_command, args=("dung",), daemon=True).start()
 
             # 5. Gửi cảnh báo giọng nói ra Loa Robot nếu vật cản CHẮN LIÊN TỤC TRÊN 2.5 GIÂY (Cooldown 10s)
             if (curr_time - last_send_time) >= SEND_COMMAND_INTERVAL:

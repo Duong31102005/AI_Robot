@@ -20,9 +20,9 @@ FRAME_HEIGHT = 480
 TARGET_FPS = 30
 
 # --- YOLO Configuration ---
-YOLO_MODEL = os.getenv("YOLO_MODEL", "yolo11s.pt")
+YOLO_MODEL = os.getenv("YOLO_MODEL", "yolo11n.pt")
 YOLO_MODEL_NAME = YOLO_MODEL  # Tương thích ngược
-YOLO_CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", 0.40))
+YOLO_CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", 0.35))
 CONFIDENCE_THRESHOLD = YOLO_CONFIDENCE  # Tương thích ngược
 YOLO_IMAGE_SIZE = int(os.getenv("YOLO_IMAGE_SIZE", 320))
 YOLO_PERSON_CLASS = 0  # Class ID của 'person' trong COCO dataset
@@ -77,7 +77,7 @@ STT_STREAMING_ENABLED = os.getenv("STT_STREAMING_ENABLED", "True").lower() in ("
 PARTIAL_INTERVAL_MS = int(os.getenv("PARTIAL_INTERVAL_MS", 200))  # Cập nhật chữ tạm thời mỗi 200ms
 
 # --- VAD & Continuous Speech Detection Configuration ---
-STT_MIN_CONFIDENCE = float(os.getenv("STT_MIN_CONFIDENCE", 0.65))          # Ngưỡng độ tin cậy tối thiểu 65% (chuẩn hóa tiếng Việt)
+STT_MIN_CONFIDENCE = float(os.getenv("STT_MIN_CONFIDENCE", 0.50))          # Ngưỡng độ tin cậy tối thiểu 50% (chuẩn hóa tiếng Việt)
 VAD_RMS_THRESHOLD = float(os.getenv("VAD_RMS_THRESHOLD", 0.015))          # Ngưỡng âm lượng RMS: Bắt nói gần Mic, loại tiếng xa/ồn
 VAD_SILENCE_DURATION = float(os.getenv("VAD_SILENCE_DURATION", 0.7))       # Dừng ngay sau 0.7s im lặng để phản hồi cực nhanh kiểu XiaoZhi
 VAD_MIN_SPEECH_DURATION = float(os.getenv("VAD_MIN_SPEECH_DURATION", 0.3)) # Lọc tiếng gõ phím/tiếng động ngắn (<0.3s)

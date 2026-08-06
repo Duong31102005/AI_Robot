@@ -51,6 +51,29 @@ class YOLOStreamHandler(BaseHTTPRequestHandler):
                     break
                 except Exception:
                     break
+    def do_POST(self):
+        """Xử lý câu hỏi Text từ Web UI và đẩy qua luồng Log Terminal + LLM + TTS Speaker."""
+        if self.path in ['/chat', '/api/ai/chat', '/ai/chat']:
+            try:
+                content_length = int(self.headers.get('Content-Length', 0))
+                post_data = self.rfile.read(content_length).decode('utf-8')
+                import json
+                data = json.loads(post_data) if post_data else {}
+                question = data.get("question") or data.get("prompt") or data.get("text") or ""
+
+                from scripts.main_stt import process_text_prompt
+                answer = process_text_prompt(question)
+
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                response_json = json.dumps({"question": question, "answer": answer, "reply": answer}, ensure_ascii=False)
+                self.wfile.write(response_json.encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(str(e).encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()

@@ -195,30 +195,56 @@ class VisionIntelligence:
             pass
         return None
 
-    # --- 4. DRAW HIGH-TECH HUD OVERLAY & ROBOT EXPRESSION EMOJI & SKELETON ---
+    # --- 4. DOOR FRAME STRUCTURE DETECTOR ---
+    def scan_door_frame_bbox(self, frame: np.ndarray) -> Optional[Tuple[int, int, int, int]]:
+        """
+        Phát hiện Khung Cửa Đứng (Door Frame Structure Detection) dựa trên viền hình chữ nhật thẳng đứng.
+        Tự động nhận diện khung cửa ở bất kỳ vị trí nào trong hình (Trái, Giữa, Phải).
+        """
+        if frame is None:
+            return None
+        try:
+            h, w = frame.shape[:2]
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            edges = cv2.Canny(blurred, 40, 120)
+
+            contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            door_boxes = []
+
+            for c in contours:
+                area = cv2.contourArea(c)
+                if area > (w * h * 0.04):  # Khung cửa chiếm > 4% diện tích hình
+                    x, y, bw, bh = cv2.boundingRect(c)
+                    aspect_ratio = bh / float(bw) if bw > 0 else 0
+                    height_ratio = bh / float(h)
+
+                    # Khung cửa phòng/cửa ra vào luôn cao đứng (bh >= 35% chiều cao frame, aspect_ratio >= 1.1)
+                    if height_ratio >= 0.35 and aspect_ratio >= 1.1:
+                        door_boxes.append((x, y, x + bw, y + bh))
+
+            if door_boxes:
+                # Chọn khung cửa rộng nhất
+                best_box = max(door_boxes, key=lambda b: (b[2] - b[0]) * (b[3] - b[1]))
+                return best_box
+        except Exception:
+            pass
+        return None
+
+    # --- 5. DRAW INTELLIGENCE HUD OVERLAY ---
     def draw_intelligence_hud(self, debug_frame: np.ndarray) -> np.ndarray:
-        """Vẽ Bộ Xương 21 Khớp Bàn Tay, Khung phát sáng QR Code, Banner Cử chỉ tay & Biểu cảm Robot AI."""
+        """Vẽ Bộ Xương 21 Khớp Bàn Tay, Khung phát sáng QR Code, Banner Cử chỉ tay & Bounding Box Cửa đóng."""
         if debug_frame is None:
             return debug_frame
 
         h, w = debug_frame.shape[:2]
         now = time.time()
 
-        # a. Vẽ 21 Khớp xương Bàn tay trực tiếp lên debug_frame
-        if hasattr(self, 'last_hand_skeleton_pts') and self.last_hand_skeleton_pts:
-            try:
-                pts = self.last_hand_skeleton_pts
-                center_pt = pts[0]
-                for p in pts[1:]:
-                    cv2.line(debug_frame, center_pt, p, (0, 255, 255), 2)
-                    cv2.circle(debug_frame, p, 6, (0, 255, 0), -1)
-                    cv2.circle(debug_frame, p, 2, (255, 255, 255), -1)
-                cv2.circle(debug_frame, center_pt, 8, (0, 0, 255), -1)
-            except Exception:
-                pass
+        # a. Xóa bỏ nhận diện cửa giả từ Canny Contour cũ (chỉ nhận diện khi có đối tượng cửa thực tế)
+        self.last_door_bbox = None
 
         # b. Vẽ Biểu cảm Robot AI (Expression Emoji) góc trên bên phải
-        cv2.putText(debug_frame, f"AI: {self.current_expression}", (w - 240, 30),
+        cv2.putText(debug_frame, f"AI: {self.current_expression}", (w - 280, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, self.expression_color, 2)
 
         # c. Vẽ khung phát sáng QR Code
@@ -241,40 +267,67 @@ class VisionIntelligence:
 
         return debug_frame
 
-    # --- 6. DOOR & ELEVATOR ASSISTANCE (Nhận diện cửa/thang máy & Nhờ mở cửa phát loa) ---
-    def detect_door_or_elevator_and_assist(self, frame: np.ndarray, detections: List[Dict[str, Any]] = None) -> Optional[str]:
+    # --- 6. DOOR, ELEVATOR & SPECIFIC OBSTACLE ASSISTANCE ---
+    def detect_door_or_elevator_and_assist(self, frame: np.ndarray, detections: List[Dict[str, Any]] = None, target: Optional[Dict[str, Any]] = None) -> Optional[str]:
         """
-        Nhận diện Cửa đóng / Cửa Thang máy đứng chặn trước mặt Robot.
-        Tự động dừng xe và trả về câu xin trợ giúp để phát loa Kim Qui (Cooldown 20s).
+        Phân biệt rõ các trường hợp vật cản trước mặt để tự động dừng xe và phát loa nhờ trợ giúp phù hợp:
+        1. Cửa đóng (Door): Phát loa nhờ người xung quanh MỞ CỬA GIÚP.
+        2. Cửa Thang máy (Elevator): Phát loa nhờ BẤM NÚT THANG MÁY.
+        3. Vật cản di động (Người, Ghế, Bàn, Hành lý...): Phát loa XIN NHƯỜNG ĐƯỜNG đích danh tên vật cản (Cooldown 15s).
         """
         if frame is None:
             return None
         now = time.time()
-        if hasattr(self, 'last_assist_time') and (now - self.last_assist_time < 20.0):
+        if hasattr(self, 'last_assist_time') and (now - self.last_assist_time < 15.0):
             return None
 
         h, w = frame.shape[:2]
         is_elevator = False
         is_door = False
+        obstacle_label_vi = ""
 
-        # 1. Quét danh sách vật thể từ YOLO (nếu có nhãn door / elevator)
+        LABEL_VI_MAP = {
+            "person": "người",
+            "chair": "ghế",
+            "couch": "ghế sofa",
+            "bench": "băng ghế",
+            "dining table": "bàn",
+            "desk": "bàn làm việc",
+            "backpack": "hành lý",
+            "handbag": "túi xách",
+            "suitcase": "vali hành lý",
+            "potted plant": "chậu cây",
+            "bottle": "vật dụng",
+            "box": "thùng hàng",
+            "cart": "xe đẩy hàng",
+            "trash can": "thùng rác",
+            "wastebasket": "thùng rác",
+            "garbage can": "thùng rác"
+        }
+
+        # 1. Quét danh sách vật thể từ YOLO
         if detections:
             for det in detections:
                 label = det.get("label", "").lower()
+                box = det.get("box", [0, 0, w, h])
+                det_h = box[3] - box[1] if len(box) >= 4 else 0
+                height_ratio = det_h / float(h)
+
                 if any(kw in label for kw in ["elevator", "lift", "thang máy"]):
                     is_elevator = True
                     break
                 elif any(kw in label for kw in ["door", "gate", "cửa"]):
                     is_door = True
                     break
+                # Nếu có vật cản lớn (người, ghế, bàn...) che trước mặt camera (>65% chiều cao)
+                elif height_ratio >= 0.65 and not obstacle_label_vi:
+                    obstacle_label_vi = LABEL_VI_MAP.get(label, label)
 
         # 2. Nếu không có nhãn YOLO, soi ma trận bức tường chắn ngang sát mặt camera (>80% chiều cao frame)
-        if not is_elevator and not is_door:
-            # Soi vùng trung tâm camera xem có mảng vật cản lớn phẳng chắn ngang mặt (Cửa phòng / Cửa thang đóng)
+        if not is_elevator and not is_door and not obstacle_label_vi:
             center_crop = frame[int(h*0.2):int(h*0.8), int(w*0.25):int(w*0.75)]
             gray = cv2.cvtColor(center_crop, cv2.COLOR_BGR2GRAY)
             variance = np.var(gray)
-            # Mảng tường/cửa phẳng có variance cấu trúc phẳng và kích thước chắn ngang
             if variance < 800 and center_crop.shape[0] > (h * 0.5):
                 is_door = True
 
@@ -282,14 +335,44 @@ class VisionIntelligence:
             self.last_assist_time = now
             self.current_expression = "(ʘoʘ) ELEVATOR"
             self.expression_color = (0, 255, 255)
+            self.last_door_bbox = (int(w * 0.35), int(h * 0.1), int(w * 0.90), int(h * 0.90))
+            if detections is not None:
+                detections.append({
+                    "class_name": "elevator", "label": "elevator", "confidence": 0.92,
+                    "x1": self.last_door_bbox[0], "y1": self.last_door_bbox[1],
+                    "x2": self.last_door_bbox[2], "y2": self.last_door_bbox[3],
+                    "center_x": (self.last_door_bbox[0] + self.last_door_bbox[2]) // 2,
+                    "center_y": (self.last_door_bbox[1] + self.last_door_bbox[3]) // 2,
+                    "width": self.last_door_bbox[2] - self.last_door_bbox[0],
+                    "height": self.last_door_bbox[3] - self.last_door_bbox[1]
+                })
             logger.info("🛗 [ASSISTANCE] Phát hiện Thang Máy! Kích hoạt loa xin bấm thang...")
-            return "Dạ, Kim Qui xin chào! Kim Qui đang đứng chờ thang máy, nhờ bạn tốt bụng bấm nút thang giúp Kim Qui lên tầng với ạ! Kim Qui xin cảm ơn nhiều!"
+            return "Dạ, Kim Qui xin chào! Kim Qui đang đứng chờ thang máy, kính nhờ anh chị bấm nút thang máy giúp Kim Qui với ạ! Kim Qui xin cảm ơn nhiều!"
+
         elif is_door:
             self.last_assist_time = now
             self.current_expression = "(◕_◕) DOOR CLOSED"
             self.expression_color = (0, 255, 255)
+            self.last_door_bbox = (int(w * 0.45), int(h * 0.08), int(w * 0.96), int(h * 0.92))
+            if detections is not None:
+                detections.append({
+                    "class_name": "door", "label": "door", "confidence": 0.89,
+                    "x1": self.last_door_bbox[0], "y1": self.last_door_bbox[1],
+                    "x2": self.last_door_bbox[2], "y2": self.last_door_bbox[3],
+                    "center_x": (self.last_door_bbox[0] + self.last_door_bbox[2]) // 2,
+                    "center_y": (self.last_door_bbox[1] + self.last_door_bbox[3]) // 2,
+                    "width": self.last_door_bbox[2] - self.last_door_bbox[0],
+                    "height": self.last_door_bbox[3] - self.last_door_bbox[1]
+                })
             logger.info("🚪 [ASSISTANCE] Phát hiện Cửa đóng! Kích hoạt loa xin mở cửa...")
-            return "Dạ, Kim Qui xin chào! Phía trước cửa đang đóng, nhờ bạn tốt bụng mở cửa giúp Kim Qui để Kim Qui đi qua với ạ! Kim Qui xin cảm ơn nhiều!"
+            return "Dạ, Kim Qui xin chào! Phía trước cửa đang đóng, kính nhờ quý khách hoặc anh chị tốt bụng xung quanh mở cửa giúp Kim Qui với ạ! Kim Qui xin cảm ơn nhiều!"
+
+        elif obstacle_label_vi:
+            self.last_assist_time = now
+            self.current_expression = "(◠‿◠) YIELD REQUEST"
+            self.expression_color = (255, 165, 0)
+            logger.info(f"🚧 [OBSTACLE YIELD] Phát hiện '{obstacle_label_vi}' cản đường! Kích hoạt loa xin nhường đường...")
+            return f"Dạ, phía trước có {obstacle_label_vi} đang cản đường, kính nhờ quý khách nhường đường giúp Kim Qui đi qua với ạ! Xin cảm ơn nhiều!"
 
         return None
 

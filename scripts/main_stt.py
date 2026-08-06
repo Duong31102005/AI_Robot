@@ -23,10 +23,12 @@ from utils.logger import get_logger
 logger = get_logger("MainSTT")
 
 WAKE_KEYWORDS = [
+    "kim", "quy", "qui", "kìm", "quỳ", "quý",
     "rùa", "rùa ơi", "ơi rùa", "con rùa", "robot rùa", "bạn rùa", "chú rùa",
     "kim qui", "kim quy", "kim quý", "kim qui ơi", "ơi kim qui",
     "minh quý", "nguyễn minh quý", "kỳ quý", "kín quý", "chim quý",
-    "phương nam", "phương nam ơi", "ơi phương nam", "robot phương nam"
+    "phương nam", "phương nam ơi", "ơi phương nam", "robot phương nam",
+    "rẽ", "rẽ lên", "rẽ trái", "rẽ phải", "đi", "đi thẳng", "tiến", "lùi", "dừng", "dừng lại", "xoay", "quẹo", "chào"
 ]
 
 
@@ -59,6 +61,10 @@ def main():
 
     llm = OllamaLLM() if ENABLE_LLM_CHAT else None
     tts = TTSEngine() if ENABLE_TTS_SPEAKER else None
+
+    global _global_pi_client, _global_llm
+    _global_pi_client = pi_client
+    _global_llm = llm
 
     # Callback hiển thị chữ tạm thời (Partial Subtitle) kiểu YouTube thời gian thực
     def handle_partial_subtitle(partial_text: str):
@@ -222,6 +228,91 @@ def main():
     except Exception as e:
         logger.error(f"Lỗi STT: {e}")
         pi_client.send_command("dừng")
+
+_global_pi_client = None
+_global_llm = None
+
+def process_text_prompt(prompt: str) -> str:
+    """
+    Xử lý câu hỏi / câu lệnh nhập từ Web Chat Text.
+    In Log terminal ĐẦY ĐỦ Y HỆT KHI NÓI QUA MICROPHONE:
+    - 🧠 [ROBOT STATE: THINKING_LLM]
+    - 🔊 [ROBOT STATE: SPEAKING_TTS]
+    - Gửi loa TTS ra Pi và thực thi lệnh bánh xe.
+    """
+    global _global_pi_client, _global_llm
+    prompt_clean = prompt.strip()
+    if not prompt_clean:
+        return "Dạ, Kim Qui đang lắng nghe bạn đây ạ!"
+
+    logger.info(f"💬 [WEB TEXT PROMPT RECEIVED] Nhận câu hỏi từ Web Chat Text: '{prompt_clean}'")
+    logger.info(f"🧠 [ROBOT STATE: THINKING_LLM] Đang suy luận câu hỏi: '{prompt_clean}'...")
+
+    try:
+        from vision.vision_intelligence import vision_intelligence
+        vision_intelligence.current_expression = "(🧠_🧠) THINKING"
+        vision_intelligence.expression_color = (255, 255, 0)
+    except Exception:
+        pass
+
+    # 1. Thực thi Lệnh Bánh Xe nếu là câu lệnh di chuyển
+    cmd_norm = CommandNormalizer.normalize(prompt_clean)
+    if cmd_norm:
+        logger.info(f"🚗 [WEB COMMAND EXECUTE] Nhận diện lệnh bánh xe: '{cmd_norm}'")
+        if _global_pi_client:
+            _global_pi_client.send_command(cmd_norm)
+
+    # 2. Suy luận câu trả lời qua Knowledge Base hoặc LLM
+    reply = ""
+
+    # a. Tra cứu tri thức nhanh (Instant Knowledge Base & Fuzzy Typo ASCII Match - 0ms)
+    p_lower = prompt_clean.lower()
+    ascii_clean = CommandNormalizer.remove_accents(p_lower)
+
+    if any(kw in ascii_clean for kw in ["giam khao", "giam thao", "giam kho", "ban giam", "thay co", "hoi dong"]):
+        reply = "Dạ, Kim Qui xin kính chào Ban Giám khảo và quý Thầy Cô! Kim Qui rất vinh dự được đồng hành và phục vụ quý Thầy Cô hôm nay ạ!"
+    elif any(kw in ascii_clean for kw in ["ten gi", "ten la gi", "ten ban", "cau ten gi", "gioi thieu", "ban la ai"]):
+        reply = "Dạ, em tên là Kim Qui, được sáng tạo bởi nhóm sinh viên Galacticos Khoa CNTT Trường Đại học Đại Nam ạ!"
+    elif any(kw in ascii_clean for kw in ["xin chao", "chao ban", "hello", "hi kim qui", "chao"]):
+        reply = "Dạ, Kim Qui xin chào bạn! Kim Qui đang sẵn sàng hỗ trợ di chuyển và trả lời câu hỏi nè!"
+
+    # b. Nếu chưa có trong KB -> Gọi Ollama LLM
+    if not reply:
+        if _global_llm is None:
+            try:
+                _global_llm = OllamaLLM()
+            except Exception:
+                pass
+
+        if _global_llm and _global_llm.is_available():
+            reply = _global_llm.generate_response(prompt_clean)
+
+    if not reply:
+        reply = f"Dạ, Kim Qui đã nhận được câu hỏi: '{prompt_clean}'. Kim Qui luôn sẵn sàng hỗ trợ bạn ạ!"
+
+    logger.info(f"🔊 [ROBOT STATE: SPEAKING_TTS] AI Trả lời: '{reply}'")
+    sys.stdout.flush()
+
+    try:
+        from vision.vision_intelligence import vision_intelligence
+        vision_intelligence.current_expression = "(🔊_🔊) SPEAKING"
+        vision_intelligence.expression_color = (0, 255, 255)
+    except Exception:
+        pass
+
+    # 3. Gửi tiếng nói TTS TRỰC TIẾP RA LOA CỦA ROBOT TRÊN RASPBERRY PI
+    if _global_pi_client is None:
+        try:
+            _global_pi_client = PiClient()
+        except Exception:
+            pass
+
+    if _global_pi_client:
+        target_client = _global_pi_client
+        threading.Thread(target=target_client.send_tts, args=(reply,), daemon=True).start()
+        threading.Thread(target=target_client.send_conversation, args=(prompt_clean, reply), daemon=True).start()
+
+    return reply
 
 
 if __name__ == "__main__":

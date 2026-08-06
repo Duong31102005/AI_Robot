@@ -11,33 +11,57 @@ class PiClient:
         self.url = url
         self.dry_run = dry_run
         self.last_connected_status = False
+        # Danh sách IP dự phòng tự động khi IP Pi thay đổi giữa các mạng Wi-Fi
+        self.candidate_ips = ["192.168.60.127", "192.168.61.135", "127.0.0.1"]
 
-    def test_connection(self, timeout: float = 3.0) -> bool:
-        """Kiểm tra đường truyền HTTP tới Raspberry Pi server."""
+    def test_connection(self, timeout: float = 2.0) -> bool:
+        """Kiểm tra đường truyền HTTP tới Raspberry Pi server (tự động thử danh sách IP dự phòng)."""
         if self.dry_run:
             logger.info("[PI] DRY_RUN Mode enabled: Giả lập kết nối thành công.")
             self.last_connected_status = True
             return True
 
-        logger.info(f"[PI] Checking connection to Raspberry Pi ({self.url})...")
+        # Thu thập danh sách URL thử nghiệm
+        urls_to_try = [self.url]
+        for ip in self.candidate_ips:
+            alt_url = f"http://{ip}:8000/command"
+            if alt_url not in urls_to_try:
+                urls_to_try.append(alt_url)
+
+        for test_url in urls_to_try:
+            logger.info(f"[PI] Checking connection to Raspberry Pi ({test_url})...")
+            try:
+                response = requests.post(
+                    test_url,
+                    json={"text": "giu_nguyen"},
+                    timeout=timeout
+                )
+                if response.status_code == 200:
+                    self.url = test_url
+                    self.last_connected_status = True
+                    logger.info(f"[PI] Connected successfully to Pi at '{test_url}'! (HTTP 200)")
+                    return True
+            except Exception:
+                pass
+
+        logger.error(f"[PI] Connection failed to all Pi candidate IPs: {urls_to_try}")
+        self.last_connected_status = False
+        return False
+
+    def get_current_mode(self, timeout: float = 0.8) -> str:
+        """Truy vấn Mode hiện tại từ Raspberry Pi Backend (GET /api/robot/status)."""
+        if self.dry_run:
+            return "MANUAL"
+
         try:
-            # Gửi thử 1 lệnh 'giu_nguyen' test
-            response = requests.post(
-                self.url,
-                json={"text": "giu_nguyen"},
-                timeout=timeout
-            )
-            is_ok = (response.status_code == 200)
-            self.last_connected_status = is_ok
-            if is_ok:
-                logger.info(f"[PI] Connected successfully! (HTTP {response.status_code})")
-            else:
-                logger.warning(f"[PI] Connection response HTTP {response.status_code}")
-            return is_ok
-        except Exception as e:
-            logger.error(f"[PI] Connection failed: {e}")
-            self.last_connected_status = False
-            return False
+            status_url = self.url.replace("/command", "/api/robot/status")
+            response = requests.get(status_url, timeout=timeout)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("mode", "MANUAL")
+        except Exception:
+            pass
+        return "MANUAL"
 
     check_connection = test_connection
 
@@ -46,19 +70,19 @@ class PiClient:
         if not text:
             return False
 
-        # Chuẩn hóa câu lệnh tiếng Việt sang mã lệnh động cơ ESP32 chuẩn (tien 150, dung, etc.)
+        # Chuẩn hóa câu lệnh tiếng Việt (Cho phép truyền tốc độ linh hoạt 0..255)
         cmd_lower = text.strip().lower()
         mapping = {
-            "đi thẳng": "tien 150",
-            "đi lùi": "lui 150",
-            "rẽ trái": "trai 150",
-            "rẽ phải": "phai 150",
-            "xoay trái": "xoay_trai 150",
-            "xoay phải": "xoay_phai 150",
-            "chéo trái": "cheo_tt 150",
-            "chéo phải": "cheo_tp 150",
-            "lùi chéo trái": "cheo_st 150",
-            "lùi chéo phải": "cheo_sp 150",
+            "đi thẳng": "tien",
+            "đi lùi": "lui",
+            "rẽ trái": "trai",
+            "rẽ phải": "phai",
+            "xoay trái": "xoay_trai",
+            "xoay phải": "xoay_phai",
+            "chéo trái": "cheo_tt",
+            "chéo phải": "cheo_tp",
+            "lùi chéo trái": "cheo_st",
+            "lùi chéo phải": "cheo_sp",
             "dừng": "dung",
             "dừng lại": "dung"
         }
@@ -109,29 +133,32 @@ class PiClient:
             logger.info(f"[PI] [DRY_RUN] TTS simulated: '{text}'")
             return True
 
-        tts_url = self.url.replace("/command", "/tts")
-        try:
-            response = requests.post(
-                tts_url,
-                json={"text": text},
-                timeout=timeout
-            )
-            is_ok = (response.status_code == 200)
-            if is_ok:
-                logger.info(f"[PI] TTS sent to Pi Speaker successfully: '{text}' (HTTP 200)")
-            else:
-                logger.warning(f"[PI] TTS send failed HTTP {response.status_code}")
-            return is_ok
-        except Exception as e:
-            logger.error(f"[PI] Error sending TTS to Pi: {e}")
-            return False
+        # Thử lần lượt danh sách IP dự phòng trên các cổng TTS của Pi (Port 8001 /tts, /speech/tts và Port 8000 /command với 'say')
+        tts_urls = []
+        for ip in self.candidate_ips:
+            tts_urls.append(f"http://{ip}:8001/tts")
+            tts_urls.append(f"http://{ip}:8001/speech/tts")
+            tts_urls.append(f"http://{ip}:8000/command")
+
+        for tts_url in tts_urls:
+            try:
+                payload = {"text": f"say {text}"} if "command" in tts_url else {"text": text}
+                response = requests.post(tts_url, json=payload, timeout=timeout)
+                if response.status_code == 200:
+                    logger.info(f"🟢 [PI SPEAKER LA16 SUCCESS] Played audio on Pi ({tts_url}): '{text}'")
+                    return True
+            except Exception:
+                pass
+
+        logger.error(f"[PI] Error sending TTS to Pi across URLs: {tts_urls}")
+        return False
 
     def is_connected(self) -> bool:
         """Trả về trạng thái kết nối gần nhất."""
         return self.last_connected_status
 
     def send_conversation(self, prompt: str, reply: str, mission_id: int = 1) -> bool:
-        """Gửi nhật ký hội thoại lên HTTP bridge của Pi (port 8001)."""
+        """Gửi nhật ký hội thoại đồng bộ lên NoSQL Database & HTTP bridge của Pi."""
         if not prompt or not reply:
             return False
         if self.dry_run:
@@ -139,28 +166,31 @@ class PiClient:
             return True
 
         import json
-        conversation_url = self.url.replace("/command", "/conversation")
-        try:
-            payload = {
-                "prompt": prompt,
-                "reply": reply,
-                "mission_id": mission_id
-            }
-            # Đồng thời lưu lịch sử hội thoại vào Web Database (Port 8000)
+        payload = {
+            "prompt": prompt,
+            "reply": reply,
+            "mission_id": mission_id
+        }
+
+        # Đồng bộ lịch sử hội thoại lên tất cả các cổng NoSQL DB & Pi Bridge
+        urls_to_sync = [
+            "http://localhost:8000/api/v1/ai/conversation",
+            "http://localhost:8000/api/v1/robot/conversation"
+        ]
+        for ip in self.candidate_ips:
+            urls_to_sync.append(f"http://{ip}:8001/conversation")
+            urls_to_sync.append(f"http://{ip}:8000/api/v1/ai/conversation")
+
+        for sync_url in urls_to_sync:
             try:
-                requests.post("http://localhost:8000/api/v1/robot/conversation", json={"prompt": prompt, "reply": reply}, timeout=1.0)
+                body = payload if "api/v1" in sync_url else {"text": json.dumps(payload)}
+                res = requests.post(sync_url, json=body, timeout=1.5)
+                if res.status_code == 200:
+                    logger.info(f"🟢 [CONVERSATION SYNC SUCCESS] Synced: User='{prompt}' -> Robot='{reply}' ({sync_url})")
             except Exception:
                 pass
 
-            response = requests.post(
-                conversation_url,
-                json={"text": json.dumps(payload)},
-                timeout=3.0
-            )
-            return response.status_code == 200
-        except Exception as e:
-            logger.error(f"[PI] Error sending conversation to Pi: {e}")
-            return False
+        return True
 
     def send_detections(self, detections: list, timeout: float = 1.0) -> bool:
         """Gửi danh sách vật thể YOLO nhận dạng được lên Web Dashboard (port 8000) & HTTP bridge của Pi (port 8001)."""

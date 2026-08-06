@@ -9,11 +9,19 @@ def print_menu():
     print("===============================================")
     print("1. Chạy Vision (Phát hiện & Theo dõi người Face-to-Face)")
     print("2. Chạy STT + LLM (Trò chuyện & Lệnh giọng nói Kim Qui)")
+    print("6. 💬 CHẠY CHẾ ĐỘ NHẬP VĂN BẢN WEB CHAT + VISION (Không mở Mic, Nhập Text -> Loa Xe)")
     print("5. 🚀 CHẠY HỢP NHẤT TOÀN BỘ (Vision + STT + LLM Đa Luồng)")
     print("3. Chạy ROS 2 Command Node (Giả lập Topic /robot/command)")
     print("4. Gửi lệnh văn bản thử nghiệm")
     print("0. Thoát")
     print("===============================================")
+
+
+def run_text_chat():
+    from scripts.main_vision import main as run_vision
+    logger.info("💬 [PURE WEB TEXT CHAT MODE] Khởi chạy Hệ thống Vision + Web Text Chat (Microphone OFF)...")
+    logger.info("👉 Hãy nhập câu hỏi/câu lệnh trực tiếp ở giao diện Web Chat, Kim Qui sẽ trả lời ra Loa Xe Robot!")
+    run_vision()
 
 
 def run_combined():
@@ -39,6 +47,9 @@ def main():
         if arg in ("5", "full", "--full", "all"):
             run_combined()
             return
+        elif arg in ("6", "text", "--text", "chat"):
+            run_text_chat()
+            return
         elif arg in ("2", "stt", "--stt"):
             from scripts.main_stt import main as run_stt
             run_stt()
@@ -50,9 +61,12 @@ def main():
 
     while True:
         print_menu()
-        choice = input("Nhập lựa chọn của bạn (0-5): ").strip()
+        choice = input("Nhập lựa chọn của bạn (0-6): ").strip()
 
-        if choice == "1":
+        if choice in ("6", "text"):
+            run_text_chat()
+            break
+        elif choice == "1":
             from scripts.main_vision import main as run_vision
             run_vision()
             break

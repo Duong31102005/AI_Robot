@@ -15,6 +15,11 @@ class OllamaLLM:
 
     # Bộ tri thức câu trả lời chuẩn xác 100% (Exact Matching Q&A phong phú & hài hước)
     KNOWLEDGE_BASE = [
+        # 0. Kính chào Ban Giám khảo & Thầy Cô (0ms Instant Match & Typo Tolerance)
+        (
+            ["chào ban giám khảo", "kính chào ban giám khảo", "chào ban giấm khảo", "ban giam khao", "giam khao", "ban giam", "chào thầy cô", "kính chào thầy cô", "chào các thầy cô", "chào hội đồng", "kim qui chào ban giám khảo", "chào"],
+            "Dạ, Kim Qui xin kính chào Ban Giám khảo và quý Thầy Cô! Kim Qui rất vinh dự được đồng hành và phục vụ quý Thầy Cô hôm nay ạ!"
+        ),
         # 1. Tên gọi & Giới thiệu
         (
             ["bạn tên là gì", "tên là gì", "tên gì", "bạn tên gì", "giới thiệu bản thân", "bạn là ai", "xinchao", "xin chào"],
@@ -244,7 +249,7 @@ class OllamaLLM:
                 "temperature": 0.7,
                 "max_tokens": 80
             }
-            res = requests.post(url, headers=headers, json=payload, timeout=4.5)
+            res = requests.post(url, headers=headers, json=payload, timeout=8.0)
             if res.status_code == 200:
                 data = res.json()
                 reply = data["choices"][0]["message"]["content"].strip()
@@ -276,7 +281,7 @@ class OllamaLLM:
                     "maxOutputTokens": 80
                 }
             }
-            res = requests.post(url, json=payload, timeout=4.0)
+            res = requests.post(url, json=payload, timeout=2.0)
             if res.status_code == 200:
                 data = res.json()
                 reply = data["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -293,11 +298,24 @@ class OllamaLLM:
 
         prompt_clean = prompt.lower().strip()
 
-        # 1. ƯU TIÊN 1: Tra cứu bộ tri thức câu trả lời chính xác 100% (Exact Matching)
+        # 1. ƯU TIÊN 1: Tra cứu bộ tri thức câu trả lời chính xác 100% (Exact & Accent-Insensitive Matching)
+        try:
+            from utils.command_normalizer import CommandNormalizer
+            ascii_prompt = CommandNormalizer.remove_accents(prompt_clean)
+        except Exception:
+            ascii_prompt = prompt_clean
+
         for keywords, exact_reply in self.KNOWLEDGE_BASE:
-            if any(kw in prompt_clean for kw in keywords):
-                logger.info(f"[LLM] Exact Match Knowledge Base: '{prompt}' -> '{exact_reply}'")
-                return exact_reply
+            for kw in keywords:
+                kw_clean = kw.lower().strip()
+                try:
+                    kw_ascii = CommandNormalizer.remove_accents(kw_clean)
+                except Exception:
+                    kw_ascii = kw_clean
+                
+                if kw_clean in prompt_clean or kw_ascii in ascii_prompt:
+                    logger.info(f"[LLM Exact Match KB] Prompt: '{prompt}' -> Reply: '{exact_reply}'")
+                    return exact_reply
 
         # 2. ƯU TIÊN 2: Truy vấn ShopAIKey Cloud API (GPT-4o-mini / GPT-4o / Claude)
         shopai_reply = self._query_shopaikey_api(prompt)
@@ -327,7 +345,7 @@ class OllamaLLM:
             response = requests.post(
                 self.generate_url,
                 json=payload,
-                timeout=15.0
+                timeout=3.0
             )
 
             if response.status_code == 200:

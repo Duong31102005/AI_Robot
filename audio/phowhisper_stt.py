@@ -39,7 +39,7 @@ from config.settings import (
     SAMPLE_RATE, RECORD_SECONDS, AUDIO_OUTPUT_PATH, LANGUAGE,
     PHOWHISPER_MODEL_NAME, STT_USE_GPU, STT_CPU_THREADS,
     STT_BEAM_SIZE, STT_BEST_OF, STT_TEMPERATURE, STT_PATIENCE,
-    STT_CONDITION_ON_PREVIOUS_TEXT, VAD_RMS_THRESHOLD, VAD_SILENCE_DURATION,
+    STT_CONDITION_ON_PREVIOUS_TEXT, STT_MIN_CONFIDENCE, VAD_RMS_THRESHOLD, VAD_SILENCE_DURATION,
     VAD_MIN_SPEECH_DURATION, VAD_MAX_SPEECH_DURATION, VAD_PRE_ROLL, VAD_POST_ROLL, STT_VAD
 )
 from audio.audio_dsp import process_audio_dsp
@@ -294,11 +294,16 @@ class PhoWhisperSTT:
         self.last_postprocess_time_ms = (time.perf_counter() - post_start) * 1000.0
 
         # Ngưỡng tin cậy linh hoạt (Adaptive Confidence Threshold):
-        # - Cho phép từ khóa gọi robot "Kim Qui", "Rùa", "Galacticos" vượt qua khi confidence >= 0.40 (vì từ ngắn Whisper thường tính score ~0.50-0.60).
-        # - Các câu nói thường hoặc nhiễu âm thanh cần confidence >= 0.68 để tránh ảo giác.
-        wake_terms = ["kim qui", "rùa", "galacticos", "đại nam", "phương nam", "hoàng dương", "duy a", "duy văn", "thầy thơ", "rover", "rúa", "ro hoa", "parker", "phở", "kìm nguội"]
+        # - Nếu trong câu chứa từ khóa gọi robot ("kim", "quy", "qui", "rùa",...) -> NHẬN NGAY LẬP TỨC (min_conf = 0.00)
+        # - Các câu nói khác áp dụng ngưỡng STT_MIN_CONFIDENCE (mặc định 0.50)
+        wake_terms = [
+            "kim", "quy", "qui", "kìm", "quỳ", "quý", "rùa", "kim qui", "kim quy", 
+            "rùa kim quy", "rùa kim qui", "galacticos", "đại nam", "phương nam", 
+            "hoàng dương", "duy a", "duy văn", "thầy thơ", "rover", "rúa", "ro hoa", 
+            "parker", "phở", "kìm nguội"
+        ]
         has_wake_term = any(w in clean_text.lower() for w in wake_terms)
-        min_conf = 0.40 if has_wake_term else 0.65
+        min_conf = 0.00 if has_wake_term else STT_MIN_CONFIDENCE
 
         if self.last_confidence < min_conf:
             logger.warning(f"[PhoWhisperSTT] ⚠️ Bỏ qua kết quả do độ tin cậy thấp ({self.last_confidence:.2f} < {min_conf:.2f}): '{clean_text}'")

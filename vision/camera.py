@@ -34,14 +34,26 @@ class Camera:
         self._running = True
 
         if self._is_http:
-            # Kiểm tra thử kết nối HTTP Stream
-            try:
-                req = urllib.request.urlopen(str(self.camera_index), timeout=3.0)
-                req.close()
-                logger.info(f"[VISION] HTTP Camera Stream connected successfully ({self.camera_index})")
-            except Exception as exc:
-                logger.warn(f"[VISION] Direct HTTP check warning: {exc}, will attempt auto-retry loop.")
+            # Danh sách URL thử nghiệm tự động khi IP Pi thay đổi dải mạng Wi-Fi
+            candidate_urls = [
+                str(self.camera_index),
+                "http://192.168.60.127:8080/video_feed",
+                "http://192.168.61.135:8080/video_feed",
+                "http://localhost:8080/video_feed"
+            ]
 
+            active_url = str(self.camera_index)
+            for test_url in candidate_urls:
+                try:
+                    req = urllib.request.urlopen(test_url, timeout=1.5)
+                    req.close()
+                    active_url = test_url
+                    logger.info(f"[VISION] HTTP Camera Stream connected successfully ({active_url})")
+                    break
+                except Exception:
+                    pass
+
+            self.camera_index = active_url
             self._thread = threading.Thread(target=self._http_update_loop, daemon=True)
             self._thread.start()
 
