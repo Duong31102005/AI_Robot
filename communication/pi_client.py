@@ -12,7 +12,7 @@ class PiClient:
         self.dry_run = dry_run
         self.last_connected_status = False
         # Danh sách IP dự phòng tự động khi IP Pi thay đổi giữa các mạng Wi-Fi
-        self.candidate_ips = ["192.168.60.127", "192.168.61.135", "127.0.0.1"]
+        self.candidate_ips = ["10.68.9.203", "192.168.61.135", "127.0.0.1"]
 
     def test_connection(self, timeout: float = 2.0) -> bool:
         """Kiểm tra đường truyền HTTP tới Raspberry Pi server (tự động thử danh sách IP dự phòng)."""

@@ -38,7 +38,7 @@ class Camera:
             candidate_urls = [
                 str(self.camera_index),
                 "http://192.168.60.127:8080/video_feed",
-                "http://192.168.61.135:8080/video_feed",
+                "http://10.68.9.203:8080/video_feed",
                 "http://localhost:8080/video_feed"
             ]
 

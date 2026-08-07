@@ -1,7 +1,7 @@
 import os
 
 # --- Raspberry Pi Server Configuration ---
-PI_IP = os.getenv("PI_IP", "192.168.61.135")
+PI_IP = os.getenv("PI_IP", "10.68.9.203")
 PI_PORT = int(os.getenv("PI_PORT", 8000))
 PI_COMMAND_URL = f"http://{PI_IP}:{PI_PORT}/command"
 
